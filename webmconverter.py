@@ -59,7 +59,7 @@ def convertToWebm(inputFile):
                      f'scale={width}:{height}', '-tile-columns', '0', 
                      '-frame-parallel', '0', '-auto-alt-ref', '1', 
                      '-lag-in-frames', '25', '-g', '600', '-aq-mode', '0', 
-                     '-an', '-f', 'webm',f'.\WebM\{outputFileName}'])
+                     '-an', '-f', 'webm',f'.\Output\{outputFileName}'])
 
     subprocess.call(["ffmpeg.exe", '-i', f'{inputVideo}', '-c:v', 
                      'libvpx-vp9', '-pass', '2', '-b:v', f'{bitrate}K', 
@@ -67,7 +67,7 @@ def convertToWebm(inputFile):
                      f'scale={width}:{height}', '-tile-columns', '0', 
                      '-frame-parallel', '0', '-auto-alt-ref', '1', 
                      '-lag-in-frames', '25', '-g', '600', '-aq-mode', '0', 
-                     '-an', '-f', 'webm',f'.\WebM\{outputFileName}'])
+                     '-an', '-f', 'webm',f'.\Output\{outputFileName}'])
     pass
 
 def hasNumbers(inputString):
