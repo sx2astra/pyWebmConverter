@@ -10,6 +10,7 @@ def convertToWebm(inputFile):
     inputVideoDuration = ""
     height = ""
     width = ""
+    videoPass = 1
 
     while(hasNumbers(outputFileSize) == False):
         outputFileSize = input("Enter Output Video Size (In MB): \n")
@@ -53,22 +54,21 @@ def convertToWebm(inputFile):
     if(startButton.lower() == "q"):
         return 0
 
-    subprocess.call(["ffmpeg.exe", '-i', f'{inputVideo}', '-c:v', 
-                     'libvpx-vp9', '-pass', '1', '-b:v', f'{bitrate}K', 
-                     '-threads', '16', '-speed', '0', '-vf', 
-                     f'scale={width}:{height}', '-tile-columns', '0', 
-                     '-frame-parallel', '0', '-auto-alt-ref', '1', 
-                     '-lag-in-frames', '25', '-g', '600', '-aq-mode', '0', 
-                     '-an', '-f', 'webm',f'.\Output\{outputFileName}'])
-
-    subprocess.call(["ffmpeg.exe", '-i', f'{inputVideo}', '-c:v', 
-                     'libvpx-vp9', '-pass', '2', '-b:v', f'{bitrate}K', 
-                     '-threads', '16', '-speed', '0', '-vf', 
-                     f'scale={width}:{height}', '-tile-columns', '0', 
-                     '-frame-parallel', '0', '-auto-alt-ref', '1', 
-                     '-lag-in-frames', '25', '-g', '600', '-aq-mode', '0', 
-                     '-an', '-f', 'webm',f'.\Output\{outputFileName}'])
-    pass
+    while(videoPass != 2):
+        subprocess.call(["ffmpeg.exe", '-i', f'{inputVideo}', '-c:v', 
+                         'libvpx-vp9', '-pass', f'{videoPass}', '-b:v', 
+                         f'{bitrate}K', '-threads', '16', '-speed', '0', 
+                         '-crf', '12', '-vf', f'scale={width}:{height}', 
+                         '-tile-columns', '0', '-frame-parallel', '0', 
+                         '-auto-alt-ref', '1', '-lag-in-frames', '25', 
+                         '-row-mt', '1', '-g', '600', '-aq-mode', '0', '-an', 
+                         '-f', 'webm',f'.\Output\{outputFileName}']
+                         )
+        videoPass++
+    else:
+        print("Conversion Complete!\n")
+        input(f"File Avaliable at .\Output\{outputFileName}")
+        pass
 
 def hasNumbers(inputString):
     return any(char.isdigit() for char in inputString)
