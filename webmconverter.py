@@ -54,7 +54,7 @@ def convertToWebm(inputFile):
     if(startButton.lower() == "q"):
         return 0
 
-    while(videoPass != 2):
+    while(videoPass <= 2):
         subprocess.call(["ffmpeg.exe", '-i', f'{inputVideo}', '-c:v', 
                          'libvpx-vp9', '-pass', f'{videoPass}', '-b:v', 
                          f'{bitrate}K', '-threads', '16', '-speed', '0', 
@@ -64,11 +64,11 @@ def convertToWebm(inputFile):
                          '-row-mt', '1', '-g', '600', '-aq-mode', '0', '-an', 
                          '-f', 'webm',f'.\Output\{outputFileName}']
                          )
-        videoPass++
-    else:
-        print("Conversion Complete!\n")
-        input(f"File Avaliable at .\Output\{outputFileName}")
-        pass
+        videoPass += 1
+
+    print("Conversion Complete!\n")
+    input(f"File Avaliable at .\Output\{outputFileName}")
+    pass
 
 def hasNumbers(inputString):
     return any(char.isdigit() for char in inputString)
