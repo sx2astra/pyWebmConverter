@@ -1,11 +1,15 @@
 import os
 import subprocess
 import sys
+<<<<<<< HEAD
 import unittest
+=======
+>>>>>>> acee6f656749e8adcd37a0f64475a2b98bb7ceb5
 
 inputVideo = sys.argv[1]
 
 def convertToWebm(inputFile):
+<<<<<<< HEAD
     bitrate = calculateBitrate()
     width, height = setResolution()
     #startTime, endTime = trimVideo()
@@ -14,11 +18,51 @@ def convertToWebm(inputFile):
     outputFileName = ""
     while((outputFileName) == ""):
         outputFileName = input("Enter Output Filename: \n")
+=======
+    outputFileSize = ""
+    outputFileName = ""
+    inputVideoDuration = ""
+    height = ""
+    width = ""
+    videoPass = 1
+
+    while(hasNumbers(outputFileSize) == False):
+        outputFileSize = input("Enter Output Video Size (In MB): \n")
+        print("\n")
+
+    while(hasNumbers(inputVideoDuration) == False):
+        inputVideoDuration = input("Enter Duration (In SECONDS): \n")
+        print("\n")
+
+    while((outputFileName) == ""):
+        outputFileName = input("Enter Output Filename: \n")
+        print("\n")
+
+    while(hasNumbers(width) == False):
+        width = input("Enter Output Width (Default: 1280): \n")
+        print("\n") 
+        if(width == ""):
+            width = "1280"
+
+    while(hasNumbers(height) == False):
+        height = input("Enter Output Height (Default: -1 To Maintain Aspect" 
+                       " Ratio): \n")
+        print("\n")
+        if(height == ""):
+            height = "-1"
+>>>>>>> acee6f656749e8adcd37a0f64475a2b98bb7ceb5
 
     if ".webm" in outputFileName:
         pass
     else:
         outputFileName += ".webm"
+<<<<<<< HEAD
+=======
+
+    videoSize = int(outputFileSize)
+    outputVideoDuration = int(inputVideoDuration)
+    bitrate = int(((videoSize * 1024 * 8) / outputVideoDuration))
+>>>>>>> acee6f656749e8adcd37a0f64475a2b98bb7ceb5
     
     print(f"{width} x {height} Video Resolution")
     print((bitrate), " KB/s")
@@ -28,7 +72,10 @@ def convertToWebm(inputFile):
     if(startButton.lower() == "q"):
         return 0
 
+<<<<<<< HEAD
     videoPass = 1
+=======
+>>>>>>> acee6f656749e8adcd37a0f64475a2b98bb7ceb5
     while(videoPass <= 2):
         subprocess.call(["ffmpeg.exe", '-i', f'{inputVideo}', '-c:v', 
                          'libvpx-vp9', '-pass', f'{videoPass}', '-b:v', 
@@ -45,6 +92,7 @@ def convertToWebm(inputFile):
     input(f"File Avaliable at .\Output\{outputFileName}")
     pass
 
+<<<<<<< HEAD
 def trimVideo():
     startTime = ""
     endTime = ""
@@ -109,6 +157,8 @@ def setResolution():
 
     return width, height
 
+=======
+>>>>>>> acee6f656749e8adcd37a0f64475a2b98bb7ceb5
 def hasNumbers(inputString):
     return any(char.isdigit() for char in inputString)
 
