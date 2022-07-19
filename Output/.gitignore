@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 #Output Files
 .webm
 =======
@@ -132,3 +133,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 >>>>>>> main
+=======
+#Output Files
+*.webm
+>>>>>>> b2f45ca8860d7e83b1de09c18d56d7fac7b8d3fc
