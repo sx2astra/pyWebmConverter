@@ -1,10 +1,10 @@
 import pytest
 import sys
+import context
 
 sys.path.append('../pyWebMConverter')
 
 from pyWebMConverter import *
-from context import pyWebMConverter
 
 xfail = pytest.mark.xfail
 
