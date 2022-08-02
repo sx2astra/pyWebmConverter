@@ -8,7 +8,7 @@ A Python script converting video files to VP9 WebM Format
 + Obtain pyWebMConverter Latest Release
 
 ## Usage
-+ Drag video file onto script
++ Drag video file onto main
 + Enter requested information
 + ???
 + Profit
