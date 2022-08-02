@@ -1,7 +1,7 @@
 import pytest
 import sys
 
-sys.path.insert(0, '../pyWebMConverter')
+sys.path.append('../pyWebMConverter')
 
 from pyWebMConverter import *
 from context import pyWebMConverter
