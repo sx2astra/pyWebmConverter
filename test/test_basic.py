@@ -1,6 +1,9 @@
 import pytest
 import sys
 import os
+
+os.listdir()
+
 sys.path.append("pyWebmConverter")
 
 from converter import *
