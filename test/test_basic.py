@@ -2,6 +2,7 @@ import pytest
 import sys
 import os
 
+
 try:
     sys.path.append("pyWebmConverter")
     from converter import *
@@ -9,8 +10,9 @@ except ModuleNotFoundError:
     print("Here")
     path = "./"
     print(os.listdir(path))
-    sys.path.insert(0, "/pyWebMConverter")
-    path = "./"
+    os.chdir("/pyWebmConverter")
+    cwd = os.getcwd()
+    print(cwd)
     print(os.listdir(path))
     from converter import *
 else:
