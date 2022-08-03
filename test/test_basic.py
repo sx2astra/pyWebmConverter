@@ -1,7 +1,7 @@
 import pytest
 import sys
 import os
-sys.path.append("pywebmconverter")
+sys.path.append("pyWebmConverter")
 
 from converter import *
 
