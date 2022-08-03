@@ -9,7 +9,7 @@ except ModuleNotFoundError:
 	print("Here")
 	path = "./"
 	print(os.listdir(path))
-	sys.path.append("/pyWebMConverter")
+ 	sys.path.insert(-1, ‘/pyWebMConverter’)
 	path = "./"
 	print(os.listdir(path))
 	from converter import *
