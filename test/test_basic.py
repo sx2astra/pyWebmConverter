@@ -2,11 +2,17 @@ import pytest
 import sys
 import os
 
-os.listdir()
-
-sys.path.append("pyWebmConverter")
-
-from converter import *
+try:
+	sys.path.append("pyWebmConverter")
+	from converter import *
+except ModuleNotFoundError:
+	sys.path.insert(0, "D:/Git/pyWebmConverter/pyWebmConverter")
+	from converter import *
+else:
+	sys.path.insert(0, "/home/runner/work/pyWebmConverter/pyWebmConverter")
+	from converter import *
+finally:
+	pass
 
 xfail = pytest.mark.xfail
 
