@@ -10,7 +10,7 @@ except ModuleNotFoundError:
     print("Here")
     path = "./"
     print(os.listdir(path))
-    os.chdir("pyWebmConverter")
+    os.chdir("/home/runner/work/pyWebmConverter/pyWebmConverter")
     cwd = os.getcwd()
     print(cwd)
     print(os.listdir(path))
