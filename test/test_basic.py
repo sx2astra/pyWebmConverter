@@ -9,7 +9,9 @@ except ModuleNotFoundError:
 	print("Here")
 	path = "./"
 	print(os.listdir(path))
-	sys.path.insert(0, "/home/runner/work/pyWebmConverter/pyWebmConverter/pywebmconverter")
+	sys.path.append("/pyWebMConverter")
+	path = "./"
+	print(os.listdir(path))
 	from converter import *
 else:
 	print("There")
