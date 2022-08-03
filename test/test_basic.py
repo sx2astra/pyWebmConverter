@@ -1,11 +1,8 @@
 import pytest
 import sys
-import context
+sys.path.append("..")
 
-sys.path.append('../pyWebMConverter')
-
-from pyWebMConverter import *
-
+from pywebmconverter.converter import *
 xfail = pytest.mark.xfail
 
 def testHasNumbers():
