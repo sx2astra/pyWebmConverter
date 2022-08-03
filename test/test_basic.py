@@ -1,6 +1,6 @@
 import pytest
 import sys
-sys.path.append("..")
+sys.path.append("../pywebmconverter")
 
 from pywebmconverter.converter import *
 xfail = pytest.mark.xfail
