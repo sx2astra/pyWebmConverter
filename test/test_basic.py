@@ -7,6 +7,8 @@ try:
 	from converter import *
 except ModuleNotFoundError:
 	print("Here")
+	path = "/"
+	os.listdir(path)
 	sys.path.insert(0, "/home/runner/work/pyWebmConverter/pyWebmConverter/pywebmconverter")
 	from converter import *
 else:
