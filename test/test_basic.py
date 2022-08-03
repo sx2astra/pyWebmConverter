@@ -6,9 +6,11 @@ try:
 	sys.path.append("pyWebmConverter")
 	from converter import *
 except ModuleNotFoundError:
-	sys.path.insert(0, "D:/Git/pyWebmConverter/pyWebmConverter")
+	print("Here")
+	sys.path.insert(0, "/home/runner/work/pyWebmConverter/pyWebmConverter")
 	from converter import *
 else:
+	print("There")
 	sys.path.insert(0, "/home/runner/work/pyWebmConverter/pyWebmConverter")
 	from converter import *
 finally:
