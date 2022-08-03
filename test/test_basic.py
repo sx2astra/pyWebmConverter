@@ -11,8 +11,7 @@ except ModuleNotFoundError:
     path = "./"
     print(os.listdir(path))
     os.chdir("/home/runner/work/pyWebmConverter/pyWebmConverter/pyWebMConverter")
-    cwd = os.getcwd()
-    print(cwd)
+    print(sys.path)
     print(os.listdir(path))
     from converter import *
 else:
