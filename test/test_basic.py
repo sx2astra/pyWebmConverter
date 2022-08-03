@@ -7,7 +7,7 @@ try:
 	from converter import *
 except ModuleNotFoundError:
 	print("Here")
-	sys.path.insert(0, "/home/runner/work/pyWebmConverter/pyWebmConverter")
+	sys.path.insert(0, "/home/runner/work/pyWebmConverter/pyWebmConverter/pywebmconverter")
 	from converter import *
 else:
 	print("There")
