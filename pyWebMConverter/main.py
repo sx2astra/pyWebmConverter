@@ -1,40 +1,40 @@
 import subprocess
 import sys
 
-from pyWebMConverter import *
+from converter import *
 
 def main():
-    fileSize = ""
-    videoDuration = ""
-    fileName = ""
+    file_size = ""
+    video_duration = ""
+    file_name = ""
     width = ""
     height = ""
-    inputVideo = sys.argv[1]
+    input_video = sys.argv[1]
 
 
-    while(hasNumbers(fileSize) == False):
-        fileSize = input("Enter Output Video Size (In MB): \n")
+    while has_numbers(file_size) == False:
+        file_size = input("Enter Output Video Size (In MB): \n")
         print("\n")
 
-    while(hasNumbers(videoDuration) == False):
-        videoDuration = input("Enter Duration (In SECONDS): \n")
+    while has_numbers(video_duration) == False:
+        video_duration = input("Enter Duration (In SECONDS): \n")
         print("\n")
 
-    bitrate = webMConverter.calculateBitrate(fileSize, videoDuration)
+    bitrate = WebmConverter.calculate_birate(file_size, video_duration)
 
-    while((fileName) == ""):
-        fileName = input("Enter Output Filename: \n")
+    while((file_name) == ""):
+        file_name = input("Enter Output file_name: \n")
         print("\n")
 
-    fileName = webMConverter.setFileName(fileName)
+    file_name = WebmConverter.set_file_name(file_name)
 
-    while(hasNumbers(width) == False):
+    while(has_numbers(width) == False):
         width = input("Enter Output Width (Default: 1280): \n")
         print("\n") 
         if(width == ""):
             width = "1280"
 
-    while(hasNumbers(height) == False):
+    while(has_numbers(height) == False):
         height = input("Enter Output Height (Default: -1 To Maintain Aspect" 
                        " Ratio): \n")
         print("\n")
@@ -43,27 +43,27 @@ def main():
 
     print(f"{width} x {height} Video Resolution")
     print((bitrate), " KB/s")
-    print((fileName), "\n\n")
+    print((file_name), "\n\n")
 
-    startButton = input("Enter To Start Conversion. Enter 'Q' to Quit. ")
-    if(startButton.lower() == "q"):
+    start_button = input("Enter To Start Conversion. Enter 'Q' to Quit. ")
+    if(start_button.lower() == "q"):
             return 0
     
-    videoPass = 1
-    while(videoPass <= 2):
-        subprocess.call(["ffmpeg.exe", '-i', f'{inputVideo}', '-c:v', 
-                         'libvpx-vp9', '-pass', f'{videoPass}', '-b:v', 
+    video_pass  = 1
+    while(video_pass <= 2):
+        subprocess.call(["ffmpeg.exe", '-i', f'{input_video}', '-c:v', 
+                         'libvpx-vp9', '-pass', f'{video_pass}', '-b:v', 
                          f'{bitrate}K', '-threads', '16', '-speed', '0', 
                          '-crf', '12', '-vf', f'scale={width}:{height}', 
                          '-tile-columns', '0', '-frame-parallel', '0', 
                          '-auto-alt-ref', '1', '-lag-in-frames', '25', 
                          '-row-mt', '1', '-g', '600', '-aq-mode', '0', '-an', 
-                         '-f', 'webm',f'.\Output\{fileName}']
+                         '-f', 'webm',f'.\Output\{file_name}']
                          )
-        videoPass += 1
+        video_pass += 1
 
     print("Conversion Complete!\n")
-    input(f"File Avaliable at .\Output\{fileName}")
+    input(f"File Avaliable at .\Output\{file_name}")
     return 0
 
 if __name__=="__main__":

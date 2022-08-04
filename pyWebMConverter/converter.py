@@ -1,46 +1,45 @@
-class webMConverter:
-    def trimVideo():
-        startTime = ""
-        endTime = ""
-        while(hasNumbers(startTime) == False):
-            startTime = input("Enter Video Start Time (HH:MM:SS / Secs): ")
+class WebmConverter:
+    # def trim_video(self, start_time, end_time):
+    #     while has_numbers(start_time) is False:
+    #         start_time = input("Enter Video Start Time (HH:MM:SS / Secs): ")
 
-        while(hasNumbers(endTime) == False):
-            endTime = input("Enter Video End Time (HH:MM:SS / Secs): ")
+    #     while has_numbers(end_time) is False:
+    #         end_time = input("Enter Video End Time (HH:MM:SS / Secs): ")
 
-        return startTime, endTime
+    #     return start_time, end_time
 
-    def cropVideo():
-        cropW, cropH, cropX, cropY = "0"
-        switcher = input("What type of crop?\n"
-                         "0: None\n"
-                         "1: To 4:3\n"
-                         "2: To 16:9\n"
-                         "3: From Top Right\n"
-                         "4: From Center\n"
-                         "5: Custom\n"
-                        )
+    # def crop_video(self, crop_w, crop_h, crop_x, crop_y):
+    #     crop_w, crop_h, crop_x, crop_y = "0"
+    #     num = ""
+    #     switcher = input("What type of crop?\n"
+    #                      "0: None\n"
+    #                      "1: To 4:3\n"
+    #                      "2: To 16:9\n"
+    #                      "3: From Top Right\n"
+    #                      "4: From Center\n"
+    #                      "5: Custom\n"
+    #                     )
 
-        switcher = {
-            0: "pass",
-            1: "crop=ih/3*4:ih",
-            2: "crop=ih/16*9:ih",
-            3: ""
-            }
-        return switcher.get(num, "Invalid Input")
+    #     switcher = {
+    #         0: "pass",
+    #         1: "crop=ih/3*4:ih",
+    #         2: "crop=ih/16*9:ih",
+    #         3: ""
+    #         }
+    #     return switcher.get(num, "Invalid Input")
 
-    def calculateBitrate(outputFileSize, inputVideoDuration):
-        videoSize = int(outputFileSize)
-        outputVideoDuration = int(inputVideoDuration)
-        bitrate = int(((videoSize * 1024 * 8) / outputVideoDuration))
+    def calculate_bitrate(self, file_size, video_duration):
+        video_size = int(file_size)
+        video_length = int(video_duration)
+        bitrate = int(((video_size * 1024 * 8) / video_length))
         return bitrate
 
-    def setFileName(outputFileName):
-        if ".webm" in outputFileName:
-            return outputFileName
+    def set_file_name(self, file_name):
+        if ".webm" in file_name:
+            pass
         else:
-            outputFileName += ".webm"
-            return outputFileName
+            file_name += ".webm"
+        return file_name
 
-def hasNumbers(inputString):
-        return any(char.isdigit() for char in inputString)
+def has_numbers(input_string):
+    return any(char.isdigit() for char in input_string)
