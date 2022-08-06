@@ -1,11 +1,17 @@
-import pytest
 import sys
-import os
+
+import pytest
+
+sys.path.insert(0, 'D:\Git\pyWebmConverter\pyWebmConverter')
+
+from converter import *
 
 try:
+    # For running in CMD
     sys.path.append("pyWebmConverter")
     from converter import *
 except ModuleNotFoundError:
+    # For running in instance
     sys.path.insert(0, "/home/runner/work/pyWebmConverter/pyWebmConverter/pyWebMConverter")
     from converter import *
 finally:
