@@ -1,10 +1,5 @@
 import sys
-
 import pytest
-
-sys.path.insert(0, 'D:\Git\pyWebmConverter\pyWebmConverter')
-
-from converter import *
 
 try:
     # For running in CMD
