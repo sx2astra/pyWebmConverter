@@ -1,5 +1,6 @@
 from configparser import ConfigParser, NoSectionError
 import os
+import sys
 
 class WebmConverter():
 
@@ -50,16 +51,21 @@ class WebmConverter():
 
     def parse_config(self, quality, audio):
         try:
+            # For local machine pytest
             path = os.getcwd()
             configur = ConfigParser()
             print ("Current directory:" +  (path))
-            print (configur.read('pyWebmConverter/conf.ini'))
+            configur.read('pyWebmConverter/conf.ini')
+        except NoSectionError:
+            # On GitHub Instance
+            sys.path.insert(0, "/home/runner/work/pyWebmConverter/pyWebmConverter/pyWebMConverter")
+            print ("Current directory:" +  (path))
+            configur.read('conf.ini')
+        finally:
             print("Sections : ", configur.sections())
             print(configur)
-        except NoSectionError:
-            print("File not found!")        
-            print (configur.read('.\conf.ini'))
-            print("Sections : ", configur.sections())
+            pass
+
 
         print("Sections : ", configur.sections())
         print("Quality : ", configur.get('quality',f'{quality}'))

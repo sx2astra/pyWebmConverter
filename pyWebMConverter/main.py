@@ -84,6 +84,7 @@ def main():
     return 0
 
 # def oldconvert():
+# Use this for now.
 #     video_pass  = 1
 #     while(video_pass <= 2):
 #         subprocess.call(["ffmpeg.exe", '-i', f'{input_video}', '-c:v', 
