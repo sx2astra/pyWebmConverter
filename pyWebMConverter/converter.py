@@ -58,6 +58,7 @@ class WebmConverter():
             print ("Current directory:" +  (path))
             subprocess.run("ls")
             configur.read('pyWebmConverter/conf.ini')
+            print("Sections : ", configur.sections())
         except NoSectionError:
             # On GitHub Instance
             print ("Current directory:" +  (path))
