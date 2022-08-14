@@ -58,7 +58,6 @@ class WebmConverter():
             configur.read('pyWebmConverter/conf.ini')
         except NoSectionError:
             # On GitHub Instance
-            sys.path.insert(0, "/home/runner/work/pyWebmConverter/pyWebmConverter/pyWebMConverter")
             print ("Current directory:" +  (path))
             configur.read('conf.ini')
         finally:
