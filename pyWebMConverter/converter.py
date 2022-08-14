@@ -1,6 +1,7 @@
 from configparser import ConfigParser, NoSectionError
 import os
 import sys
+import subprocess
 
 class WebmConverter():
 
@@ -55,6 +56,7 @@ class WebmConverter():
             path = os.getcwd()
             configur = ConfigParser()
             print ("Current directory:" +  (path))
+            subprocess.run("ls")
             configur.read('pyWebmConverter/conf.ini')
         except NoSectionError:
             # On GitHub Instance
