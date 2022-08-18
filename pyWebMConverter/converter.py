@@ -54,7 +54,7 @@ class WebmConverter():
         try:
             # On GitHub Instance
             print ("Current directory:" +  (path))
-            configur.read('conf.ini')
+            configur.read('/conf.ini')
         except NoSectionError:
             # For local machine pytest
             path = os.getcwd()
