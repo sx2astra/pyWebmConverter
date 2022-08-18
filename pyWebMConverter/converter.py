@@ -56,10 +56,10 @@ class WebmConverter():
 
         try:
             # On GitHub Instance
-            os.chdir("./pyWebmConverter")
+            sys.path.insert(0, "/home/runner/work/pyWebmConverter/pyWebmConverter/pyWebMConverter")            
             subprocess.run("ls")
             print ("Current directory:" +  (path))
-            configur.read('/conf.ini')
+            configur.read('conf.ini')
         except NoSectionError:
             # For local machine pytest
             print ("Current directory:" +  (path))
