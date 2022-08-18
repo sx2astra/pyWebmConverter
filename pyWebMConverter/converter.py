@@ -56,6 +56,7 @@ class WebmConverter():
 
         try:
             # On GitHub Instance
+            os.chdir("./pyWebmConverter")
             subprocess.run("ls")
             print ("Current directory:" +  (path))
             configur.read('/conf.ini')
