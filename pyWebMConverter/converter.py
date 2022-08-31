@@ -52,6 +52,7 @@ class WebmConverter:
 
     def parse_config(self, quality, audio):
         configur = ConfigParser()
+<<<<<<< HEAD
 
         try:
             # On Local Machine
@@ -70,6 +71,21 @@ class WebmConverter:
             subprocess.run("ls")
             configur.read("conf.ini")
             print("Sections : ", configur.sections())
+=======
+        path = os.getcwd()
+
+        try:
+            # On GitHub Instance
+            sys.path.insert(0, "/home/runner/work/pyWebmConverter/pyWebmConverter/pyWebMConverter")            
+            subprocess.run("ls")
+            print ("Current directory:" +  (path))
+            configur.read('conf.ini')
+        except NoSectionError:
+            # For local machine pytest
+            print ("Current directory:" +  (path))
+            subprocess.run("ls")
+            configur.read('pyWebmConverter/conf.ini')
+>>>>>>> a829d1829f0c17a27f00e562a0795e533cfd7d5d
         finally:
             print("Finally...")
             print("Sections : ", configur.sections())
