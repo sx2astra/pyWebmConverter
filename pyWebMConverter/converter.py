@@ -3,8 +3,8 @@ import os
 import sys
 import subprocess
 
-class WebmConverter():
 
+class WebmConverter:
     def __init__(self) -> None:
         pass
 
@@ -51,37 +51,54 @@ class WebmConverter():
         return file_name
 
     def parse_config(self, quality, audio):
+        configur = ConfigParser()
+
         try:
-            # On GitHub Instance
-            print ("Current directory:" +  (path))
-            configur.read('conf.ini')
+            # On Local Machine
+            # path = os.getcwd()
+            # print("Try")
+            # print ("Current directory:" +  (path))
+            configur.read("./pyWebmConverter/conf.ini")
+            sections = configur.sections()
+            print(sections)
+            print("Sections : ", configur.sections())
         except NoSectionError:
             # For local machine pytest
-            path = os.getcwd()
+            print("Exception")
             configur = ConfigParser()
-            print ("Current directory:" +  (path))
+            print("Current directory:" + (path))
             subprocess.run("ls")
-            configur.read('pyWebmConverter/conf.ini')
+            configur.read("conf.ini")
             print("Sections : ", configur.sections())
         finally:
+            print("Finally...")
             print("Sections : ", configur.sections())
-            print(configur)
             pass
 
-
         print("Sections : ", configur.sections())
-        print("Quality : ", configur.get('quality',f'{quality}'))
-        print("Audio Enabled : ", configur.get('audio',f'{audio}'))
+        print("Quality : ", configur.get("quality", f"{quality}"))
+        print("Audio Enabled : ", configur.get("audio", f"{audio}"))
 
-        audio_setting = configur.get('audio',f'{audio}')
-        quality_setting = configur.get('quality',f'{quality}')
+        audio_setting = configur.get("audio", f"{audio}")
+        quality_setting = configur.get("quality", f"{quality}")
 
         return quality_setting, audio_setting
 
-    def build_arg(self, input_video, quality, audio, bitrate, width, height,
-                video_pass, file_name, file_size):
-                args_list = []
-                return args_list
+    def build_arg(
+        self,
+        input_video,
+        quality,
+        audio,
+        bitrate,
+        width,
+        height,
+        video_pass,
+        file_name,
+        file_size,
+    ):
+        args_list = []
+        return args_list
+
 
 def has_numbers(input_string):
     return any(char.isdigit() for char in input_string)
