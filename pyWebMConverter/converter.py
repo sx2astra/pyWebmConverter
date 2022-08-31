@@ -69,7 +69,7 @@ class WebmConverter:
             configur = ConfigParser()
             print("Current directory:" + (path))
             subprocess.run("ls")
-            configur.read("conf.ini")
+            configur.read("./pyWebmConverter/conf.ini")
             print("Sections : ", configur.sections())
             path = os.getcwd()
         finally:
