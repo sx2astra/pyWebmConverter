@@ -29,6 +29,8 @@ jobs:
     - name: Troubleshooting
       run: |
         ls
+        cd pyWebmConverter/
+        ls
  
     - name: Test with pytest
       run: |
