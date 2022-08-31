@@ -58,7 +58,7 @@ class WebmConverter:
             # path = os.getcwd()
             # print("Try")
             # print ("Current directory:" +  (path))
-            configur.read("./pyWebmConverter/conf.ini")
+            configur.read("./pyWebMConverter/conf.ini")
             sections = configur.sections()
             print(sections)
             print("Sections : ", configur.sections())
