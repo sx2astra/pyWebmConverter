@@ -55,31 +55,12 @@ class WebmConverter:
 
         try:
             # On Local Machine
-            # path = os.getcwd()
-            # print("Try")
-            # print ("Current directory:" +  (path))
             configur.read("./pyWebMConverter/conf.ini")
-            sections = configur.sections()
-            print(sections)
-            print("Sections : ", configur.sections())
         except NoSectionError:
             # For GitHub Linux Tester Instance
-            print("Exception")
-            path = os.path()
-            configur = ConfigParser()
-            print("Current directory:" + (path))
-            subprocess.run("ls")
-            configur.read("./pyWebmConverter/conf.ini")
-            print("Sections : ", configur.sections())
-            path = os.getcwd()
+            configur.read("./pyWebMConverter/conf.ini")
         finally:
-            print("Finally...")
-            print("Sections : ", configur.sections())
             pass
-
-        print("Sections : ", configur.sections())
-        print("Quality : ", configur.get("quality", f"{quality}"))
-        print("Audio Enabled : ", configur.get("audio", f"{audio}"))
 
         audio_setting = configur.get("audio", f"{audio}")
         quality_setting = configur.get("quality", f"{quality}")
