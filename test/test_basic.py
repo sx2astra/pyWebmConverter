@@ -16,7 +16,6 @@ finally:
 
 xfail = pytest.mark.xfail
 
-
 def test_has_numbers():
     assert has_numbers("5") == True
     assert has_numbers("a") == False
