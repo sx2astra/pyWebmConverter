@@ -1,4 +1,13 @@
+from configparser import ConfigParser, NoSectionError
+import os
+import sys
+import subprocess
+
+
 class WebmConverter:
+    def __init__(self) -> None:
+        pass
+
     # def trim_video(self, start_time, end_time):
     #     while has_numbers(start_time) is False:
     #         start_time = input("Enter Video Start Time (HH:MM:SS / Secs): ")
@@ -40,6 +49,39 @@ class WebmConverter:
         else:
             file_name += ".webm"
         return file_name
+
+    def parse_config(self, quality, audio):
+        configur = ConfigParser()
+
+        try:
+            # On Local Machine
+            configur.read("./pyWebMConverter/conf.ini")
+        except NoSectionError:
+            # For GitHub Linux Tester Instance
+            configur.read("./pyWebMConverter/conf.ini")
+        finally:
+            pass
+
+        audio_setting = configur.get("audio", f"{audio}")
+        quality_setting = configur.get("quality", f"{quality}")
+
+        return quality_setting, audio_setting
+
+    def build_arg(
+        self,
+        input_video,
+        quality,
+        audio,
+        bitrate,
+        width,
+        height,
+        video_pass,
+        file_name,
+        file_size,
+    ):
+        args_list = []
+        return args_list
+
 
 def has_numbers(input_string):
     return any(char.isdigit() for char in input_string)
