@@ -1,10 +1,11 @@
 import subprocess
-import sys
+import tkinter as tk
 
+from tkinter import filedialog
 from converter import *
 
-input_video = sys.argv[1]
-
+root = tk.Tk()
+root.withdraw()
 
 def main():
     the_converter = WebmConverter()
@@ -15,6 +16,9 @@ def main():
     height = ""
     quality_setting = ""
     audio_setting = ""
+    
+    input_video = filedialog.askopenfilename()
+    print(input_video)
 
     while has_numbers(file_size) == False:
         file_size = input("Enter Output Video Size (In MB) : \n")
@@ -69,48 +73,13 @@ def main():
         return 0
 
     video_pass = 1
-    while video_pass <= 2:
-        subprocess.call(
-            [
-                "ffmpeg.exe",
-                "-i",
-                f"{input_video}",
-                "-c:v",
-                "libvpx-vp9",
-                "-pass",
-                f"{video_pass}",
-                "-b:v",
-                f"{bitrate}K",
-                "-threads",
-                "16",
-                "-speed",
-                "0",
-                "-crf",
-                "12",
-                "-vf",
-                f"scale={width}:{height}",
-                "-tile-columns",
-                "0",
-                "-tile-columns",
-                "0",
-                "-auto-alt-ref",
-                "1",
-                "-lag-in-frames",
-                "25",
-                "-row-mt",
-                "1",
-                "-g",
-                "600",
-                "-aq-mode",
-                "0",
-                "-an",
-                "-f",
-                "webm",
-                f".\Output\{file_name}",
-            ]
-        )
-        video_pass += 1
 
+    while video_pass <= 2:
+        cmd = f"ffmpeg.exe -i {input_video} -c:v libvpx-vp9 -pass {video_pass} -b:v {bitrate}K -threads 16 -speed 0 -crf 12 -vf scale={width}:{height} -tile-columns 0 -tile-columns 0 -auto-alt-ref 1 -lag-in-frames 25 -row-mt 1 -g 600 -aq-mode 0 -an -f webm .\Output\{file_name}"
+        
+        subprocess.run(cmd, shell=True)
+        video_pass += 1
+    
     print("Conversion Complete!\n")
     input(f"File Avaliable at .\Output\{file_name}")
     return 0
