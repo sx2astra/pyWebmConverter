@@ -1,8 +1,10 @@
+import tkinter as tk
 from tkinter import filedialog
 from converter import *
 
 root = tk.Tk()
 root.withdraw()
+
 
 def main():
     the_converter = WebmConverter()
@@ -13,7 +15,7 @@ def main():
     height = ""
     quality_setting = ""
     audio_setting = ""
-    
+
     input_video = filedialog.askopenfilename()
     print(input_video)
 
@@ -55,9 +57,9 @@ def main():
 
     bitrate = the_converter.calculate_bitrate(file_size, video_duration)
     file_name = the_converter.set_file_name(file_name)
-    #quality_setting, audio_setting = the_converter.parse_config(
+    # quality_setting, audio_setting = the_converter.parse_config(
     #    quality_setting, audio_setting
-    #)
+    # )
 
     print(f"{width} x {height} Video Resolution")
     print((bitrate), " KB/s")
@@ -72,13 +74,14 @@ def main():
     video_pass = 1
     while video_pass <= 2:
         cmd = f"ffmpeg.exe -i {input_video} -c:v libvpx-vp9 -pass {video_pass} -b:v {bitrate}K -threads 16 -speed 0 -crf 12 -vf scale={width}:{height} -tile-columns 0 -tile-columns 0 -auto-alt-ref 1 -lag-in-frames 25 -row-mt 1 -g 600 -aq-mode 0 -an -f webm .\Output\{file_name}"
-        
+
         subprocess.run(cmd, shell=True)
         video_pass += 1
-    
+
     print("Conversion Complete!\n")
     input(f"File Avaliable at .\Output\{file_name}")
     return 0
+
 
 if __name__ == "__main__":
     main()
