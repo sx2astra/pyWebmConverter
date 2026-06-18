@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyWebmConverter"
-version = "1.1.0"
+version = "1.2.0-dev"
 description = "A Python GUI application for converting video files to WebM format"
 readme = "README.md"
 license = {text = "Unlicense"}
