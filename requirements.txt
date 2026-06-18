@@ -1,3 +1,9 @@
-pytest
-pytest-cov
-pytest-github-actions-annotate-failures
+# Runtime dependencies
+PyQt5>=5.15.0
+opencv-python>=4.5.0
+
+# Development dependencies (optional, install with: pip install -e ".[dev]")
+# pytest>=6.0
+# pytest-cov>=2.12
+# pytest-github-actions-annotate-failures>=0.1
+# pylint>=2.0
