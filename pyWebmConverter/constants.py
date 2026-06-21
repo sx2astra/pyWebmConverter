@@ -31,21 +31,29 @@ SCALE_FACTOR_NATIVE = 1.0  # No scaling
 
 # Audio configuration
 AUDIO_CODEC = "libopus"
-AUDIO_INITIAL_BITRATE = 96  # Initial audio bitrate for adjustment (kbps)
-AUDIO_DEFAULT_BITRATE = 48000  # Bits per second for initial encoding
-AUDIO_BITRATE_STEP = 4  # kbps adjustment step (was 2, now more aggressive)
+AUDIO_INITIAL_BITRATE = 96   # kbps — binary search starting midpoint
+AUDIO_DEFAULT_BITRATE = 96000  # bps budgeted for audio during video encode (matches above)
+AUDIO_MIN_BITRATE_KBPS = 8    # binary search lower bound
+AUDIO_MAX_BITRATE_KBPS = 128  # binary search upper bound — Opus at 128 is transparent
+AUDIO_BITRATE_STEP = 4        # kbps — binary search stops when range < this
 
 # Audio adjustment parameters
-AUDIO_ADJUSTMENT_MAX_ATTEMPTS = 25
-AUDIO_ADJUSTMENT_TOLERANCE_MB = 0.005  # Tighter tolerance (was 0.01 = 10KB, now 5KB)
+AUDIO_ADJUSTMENT_MAX_ATTEMPTS = 12  # binary search converges in ~log2(312/4) ≈ 7 steps
 AUDIO_EXTRACTION_FORMAT = "libopus"
 
+# Bitrate safety margins — reserve headroom for container overhead + rate control variance.
+# Applied directly to the bit budget so encoder parameters stay correct.
+SAFETY_MARGIN_LARGE = 0.98   # >= 8MB  : 2% reserve
+SAFETY_MARGIN_MEDIUM = 0.97  # 4–8MB  : 3% reserve
+SAFETY_MARGIN_SMALL = 0.96   # 2–4MB  : 4% reserve
+SAFETY_MARGIN_TINY = 0.94    # < 2MB  : 6% reserve (container overhead is bigger %)
+
 # Rate control settings
-# Maxrate cap factors - VP9 overshoots significantly
-# Relaxed further to allow better file size targeting
-MAXRATE_FACTOR_VERYSMALL_VP9 = 0.85  # More lenient for small files
-MAXRATE_FACTOR_SMALL_VP9 = 0.90  # More lenient for larger files
-MAXRATE_FACTOR_AV1 = 0.95  # AV1 is more stable
+# maxrate == video_bitrate: the safety margin in the budget is what keeps us under,
+# not an artificially suppressed peak rate. bufsize = 2x gives VP9 a proper VBV window.
+MAXRATE_FACTOR_VP9 = 1.0
+MAXRATE_FACTOR_AV1 = 1.0
+VBV_BUFSIZE_MULTIPLIER = 2
 
 # Quality parameters
 VP9_PROFILE = 2
@@ -84,7 +92,19 @@ ROTATION_ANGLES = {
 DEFAULT_FILE_SIZE_MB = 3.0
 DEFAULT_AUDIO = "on"
 DEFAULT_AUDIO_OPTIONS = ["on", "off"]
-DEFAULT_SCALE_OPTIONS = ["Auto", "2x", "1.5x", "1.25x", "1x", "0.75x", "0.5x", "0.25x"]
+DEFAULT_SCALE_OPTIONS = [
+    "Auto",
+    "1080p",
+    "720p",
+    "480p",
+    "2x",
+    "1.5x",
+    "1.25x",
+    "1x",
+    "0.75x",
+    "0.5x",
+    "0.25x",
+]
 DEFAULT_2PASS = True
 DEFAULT_AV1 = False
 
@@ -110,7 +130,10 @@ ERROR_INVALID_OVERRIDE = "Error: Please enter a valid override size (e.g., 2.8).
 ERROR_OVERRIDE_NEGATIVE = "Error: Override size must be greater than 0."
 ERROR_NO_DURATION = "Error: Could not determine video duration."
 ERROR_FILESIZE_TOO_SMALL = "Error: File size too small for target bitrate with audio."
-ERROR_FFMPEG_NOT_FOUND = "Error: ffmpeg.exe not found. Please ensure it is in the same directory or in your PATH."
+ERROR_FFMPEG_NOT_FOUND = (
+    "Error: ffmpeg.exe not found."
+    " Please ensure it is in the same directory or in your PATH."
+)
 
 # Success/Info messages
 INFO_EXTRACTING_AUDIO = (
@@ -128,6 +151,9 @@ INFO_ENCODING_COMPLETE = "<span style='color:green'>Video encoding complete!</sp
 INFO_AUDIO_ADJUSTMENT_START = (
     "<span style='color:blue'>Starting audio bitrate adjustment...</span>"
 )
-INFO_AUDIO_ADJUSTMENT_COMPLETE = "<span style='color:green'>Audio adjustment complete! Final audio bitrate: {}kbps</span>"
+INFO_AUDIO_ADJUSTMENT_COMPLETE = (
+    "<span style='color:green'>Audio adjustment complete!"
+    " Final audio bitrate: {}kbps</span>"
+)
 INFO_FINAL_COMPLETE = "<span style='color:green'>Final conversion complete!</span>"
 INFO_READY = "<span style='color:blue'>Ready for next conversion.</span>"
