@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased [1.2.0] "WhisicalWispa" - 2026-XX-XX
 
+### Added
+- Resolution-based scaling options (480p, 720p, 1080p) in addition to percentage-based scaling
+- Auto-detection of video dimensions for accurate resolution scaling
+
 
 ## [1.1.0] "XenialXuixo" - 2026-06-17
 

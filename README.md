@@ -106,7 +106,9 @@ python -m pyWebmConverter.ffmpeg_gui
 3. **Configure Settings**:
    - **Output Path**: Directory where the converted WebM will be saved
    - **Output Filename**: Name for the output file (without extension)
-   - **Scale**: Manual scaling (Original, 75%, 50%) - auto-scaling also applies based on bitrate
+   - **Scale**: Choose Auto, or specific options:
+     - **Resolution**: 1080p, 720p, 480p (scales to target height)
+     - **Percentage**: 2x, 1.5x, 1.25x, 1x, 0.75x, 0.5x, 0.25x
    - **Target File Size**: Desired output file size in MB
    - **Override Target Size** (optional): Use a different size for bitrate calculation if overshooting
    - **Audio**: Enable audio with Opus codec or disable for video-only
@@ -131,6 +133,14 @@ Click **"Edit Video"** to open the video editor dialog where you can:
 - **Trim**: Set start time and duration
 - **Rotate**: Apply 0°, 90°, 180°, or 270° rotation
 - **Scale**: Adjust video scaling (0.2x to 1.0x)
+
+#### Resolution-Based Scaling
+Use the Scale dropdown to target specific resolutions:
+- **1080p**: Maintains aspect ratio, scales height to 1080 pixels
+- **720p**: Common streaming resolution, good for balancing quality and file size
+- **480p**: Highly compressed, suitable for very small file sizes
+
+Alternatively, use percentage-based scaling (2x, 1.5x, 0.75x, etc.) for more granular control.
 
 #### Audio Adjustment
 The application automatically adjusts audio bitrate to hit your target file size:
