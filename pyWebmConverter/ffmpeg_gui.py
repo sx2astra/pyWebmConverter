@@ -59,7 +59,21 @@ from .constants import (
     INFO_FINAL_COMPLETE,
     INFO_READY,
     AUDIO_DEFAULT_BITRATE,
+    SAFETY_MARGIN_LARGE,
+    SAFETY_MARGIN_MEDIUM,
+    SAFETY_MARGIN_SMALL,
+    SAFETY_MARGIN_TINY,
 )
+
+
+def _safety_margin(file_size_mb: float) -> float:
+    if file_size_mb < 2.0:
+        return SAFETY_MARGIN_TINY
+    if file_size_mb < 4.0:
+        return SAFETY_MARGIN_SMALL
+    if file_size_mb < 8.0:
+        return SAFETY_MARGIN_MEDIUM
+    return SAFETY_MARGIN_LARGE
 
 
 def get_video_duration(input_path: str) -> float:
@@ -82,6 +96,48 @@ def get_video_duration(input_path: str) -> float:
     return None
 
 
+def get_video_dimensions(input_path: str) -> tuple:
+    """
+    Extract video dimensions (width, height) using ffprobe.
+
+    Args:
+        input_path: Path to the video file
+
+    Returns:
+        Tuple of (width, height), or (None, None) if unable to determine
+    """
+    cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height",
+        "-of",
+        "csv=p=0",
+        input_path,
+    ]
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace"
+        )
+    except FileNotFoundError:
+        return None, None
+    output = proc.stdout.strip()
+    if output:
+        parts = output.split(",")
+        if len(parts) >= 2:
+            try:
+                width = int(parts[0])
+                height = int(parts[1])
+                if width > 0 and height > 0:
+                    return width, height
+            except ValueError:
+                pass
+    return None, None
+
+
 class FFmpegGUI(QWidget):
     """
     Main GUI window for WebM conversion.
@@ -96,7 +152,6 @@ class FFmpegGUI(QWidget):
             "start_time": None,
             "duration": None,
             "rotation": 0,
-            "scale_factor": 1.0,
         }
         self.init_ui()
 
@@ -188,6 +243,11 @@ class FFmpegGUI(QWidget):
         self.start_btn.clicked.connect(self.start_conversion)
         layout.addWidget(self.start_btn)
 
+        self.open_folder_btn = QPushButton("Open Output Folder")
+        self.open_folder_btn.clicked.connect(self.open_output_folder)
+        self.open_folder_btn.setVisible(False)
+        layout.addWidget(self.open_folder_btn)
+
         # Output log section
         self.log = QTextEdit()
         self.log.setReadOnly(True)
@@ -200,6 +260,7 @@ class FFmpegGUI(QWidget):
         fname, _ = QFileDialog.getOpenFileName(self, "Select Input Video")
         if fname:
             self.input_path.setText(fname)
+            self.file_name.setText(os.path.splitext(os.path.basename(fname))[0])
 
     def browse_output(self):
         """Open folder dialog to select output directory."""
@@ -218,8 +279,12 @@ class FFmpegGUI(QWidget):
         editor = VideoEditorDialog(input_video, self)
         if editor.exec_() == QDialog.Accepted:
             self.editor_values = editor.get_edit_values()
+            start = self.editor_values["start_time"]
+            dur = self.editor_values["duration"]
+            rot = self.editor_values["rotation"]
             self.log.append(
-                f"<span style='color:blue'>Video edited: Trim {self.editor_values['start_time']:.2f}s for {self.editor_values['duration']:.2f}s, Rotation: {self.editor_values['rotation']}°, Scale: {self.editor_values['scale_factor']*100:.0f}%</span>"
+                f"<span style='color:blue'>Video edited: Trim {start:.2f}s"
+                f" for {dur:.2f}s, Rotation: {rot}°</span>"
             )
         editor.cap.release()
 
@@ -229,6 +294,9 @@ class FFmpegGUI(QWidget):
         input_video = self.input_path.text().strip()
         out_dir = self.out_path.text().strip()
         file_name = self.file_name.text().strip()
+        if file_name and not file_name.endswith(".webm"):
+            file_name += ".webm"
+        self.file_name.setText(file_name)
         scale = self.scale_combo.currentText()
         audio = self.audio_combo.currentText()
 
@@ -275,16 +343,21 @@ class FFmpegGUI(QWidget):
         # Use trimmed duration if available
         if self.editor_values["start_time"] is not None:
             duration_s = self.editor_values["duration"]
-            trim_prefix = f'-ss {self.editor_values["start_time"]:.2f} -t {self.editor_values["duration"]:.2f} '
+            start_t = self.editor_values["start_time"]
+            trim_t = self.editor_values["duration"]
+            trim_prefix = f"-ss {start_t:.2f} -t {trim_t:.2f} "
         else:
             duration_s = full_duration_s
             trim_prefix = ""
 
-        # Calculate bitrate from target file size
+        # Calculate bitrate from target file size.
+        # Safety margin reserves headroom for WebM container overhead and VP9/AV1
+        # rate control variance so the output reliably stays under the limit.
         bitrate_target_mb = (
             override_size_mb if override_size_mb is not None else file_size_mb
         )
-        total_bits = bitrate_target_mb * 8 * 1024 * 1024
+        margin = _safety_margin(file_size_mb)
+        total_bits = bitrate_target_mb * 8 * 1024 * 1024 * margin
         total_bitrate = int(total_bits // duration_s)
 
         # Audio setup
@@ -308,23 +381,42 @@ class FFmpegGUI(QWidget):
         )
 
         # Parse scale and intelligently adjust
+        res_target_height = (
+            None  # set for resolution-based scaling ("480p", "720p", "1080p")
+        )
         if scale == "Auto":
             factor, scale_desc = get_auto_scale_factor(file_size_mb, video_bitrate)
             self.log.append(
                 f"<span style='color:blue'>Auto-scaling: {scale_desc}</span>"
             )
+        elif scale.endswith("p"):
+            # Resolution-based scaling (480p, 720p, 1080p)
+            res_target_height = int(scale[:-1])
+            width, height = get_video_dimensions(input_video)
+            if width is None or height is None:
+                self.log.append(
+                    "<span style='color:red'>Could not determine video dimensions "
+                    "(is ffprobe installed and on PATH?)</span>"
+                )
+                return
+            factor = 1.0  # unused when res_target_height is set
+            self.log.append(
+                f"<span style='color:blue'>Scaling to {scale}: source {width}x{height}</span>"
+            )
         else:
+            # Percentage-based scaling (2x, 0.75x, etc.)
             factor = float(scale[:-1])
 
         # Build video filters
         filters = build_video_filters(
             factor,
-            self.editor_values["scale_factor"],
             self.editor_values["rotation"],
+            target_height=res_target_height,
         )
 
         # Build ffmpeg commands
         output_file = f"{out_dir}/{file_name}"
+        title = os.path.splitext(file_name)[0]
         cmd, cmd_pass2 = build_encoding_commands(
             input_video,
             output_file,
@@ -339,19 +431,25 @@ class FFmpegGUI(QWidget):
             filters,
             use_2pass,
             trim_prefix,
+            title,
         )
 
         encoding_mode = "2-Pass" if use_2pass else "1-Pass"
+        maxrate_pct = int(maxrate_factor * 100)
+        base_info = (
+            f"<span style='color:blue'>Using {codec} ({encoding_mode}) | "
+            f"Bitrate: {video_bitrate}bps | Maxrate cap: {maxrate_pct}% | "
+            f"Target: {file_size_mb}MB"
+        )
         if override_size_mb is not None:
             self.log.append(
-                f"<span style='color:blue'>Using {codec} ({encoding_mode}) | Bitrate: {video_bitrate}bps | Maxrate cap: {int(maxrate_factor*100)}% | Target: {file_size_mb}MB | Bitrate calc from: {override_size_mb}MB</span>"
+                base_info + f" | Bitrate calc from: {override_size_mb}MB</span>"
             )
         else:
-            self.log.append(
-                f"<span style='color:blue'>Using {codec} ({encoding_mode}) | Bitrate: {video_bitrate}bps | Maxrate cap: {int(maxrate_factor*100)}% | Target: {file_size_mb}MB</span>"
-            )
+            self.log.append(base_info + "</span>")
         self.log.append(
-            f"<span style='color:blue'>Quality Focus: 10-bit encoding with detailed parameters.</span>"
+            "<span style='color:blue'>"
+            "Quality Focus: 10-bit encoding with detailed parameters.</span>"
         )
         self.log.append(f"Pass 1: {cmd}")
         if cmd_pass2:
@@ -365,6 +463,7 @@ class FFmpegGUI(QWidget):
         self.current_input_video = input_video
 
         # Start conversion
+        self.open_folder_btn.setVisible(False)
         self.start_btn.setEnabled(False)
         self.worker = FFmpegWorker(cmd, cmd_pass2)
         self.worker.log_signal.connect(self.log.append)
@@ -380,9 +479,7 @@ class FFmpegGUI(QWidget):
             code: Exit code from ffmpeg
         """
         if success:
-            self.log.append(
-                f"<span style='color:green'>{INFO_ENCODING_COMPLETE}</span>"
-            )
+            self.log.append(INFO_ENCODING_COMPLETE)
 
             # Adjust audio bitrate if audio is enabled
             if hasattr(self, "current_audio") and self.current_audio == "on":
@@ -399,16 +496,28 @@ class FFmpegGUI(QWidget):
                     INFO_AUDIO_ADJUSTMENT_COMPLETE.format(final_audio_bitrate)
                 )
 
-            self.log.append(f"<span style='color:green'>{INFO_FINAL_COMPLETE}</span>")
+            self.log.append(INFO_FINAL_COMPLETE)
+
+            # Show file size summary
+            final_size_mb = os.path.getsize(self.current_output_file) / (1024 * 1024)
+            pct = (final_size_mb / self.current_target_size_mb) * 100
+            summary_color = "green" if final_size_mb <= self.current_target_size_mb else "red"
+            self.log.append(
+                f"<span style='color:{summary_color}'>"
+                f"Output: {final_size_mb:.2f} MB / {self.current_target_size_mb:.1f} MB"
+                f" target ({pct:.1f}%)</span>"
+            )
+            self.open_folder_btn.setVisible(True)
 
             # Clean up temporary ffmpeg files
             for temp_file in TEMP_LOG_FILES:
                 try:
                     if os.path.exists(temp_file):
                         os.remove(temp_file)
-                except Exception as e:
+                except OSError as e:
                     self.log.append(
-                        f"<span style='color:orange'>Warning: Could not delete {temp_file}: {e}</span>"
+                        f"<span style='color:orange'>"
+                        f"Warning: Could not delete {temp_file}: {e}</span>"
                     )
 
             # Reset input fields for next conversion
@@ -419,14 +528,20 @@ class FFmpegGUI(QWidget):
                 "start_time": None,
                 "duration": None,
                 "rotation": 0,
-                "scale_factor": 1.0,
             }
-            self.log.append(f"<span style='color:blue'>{INFO_READY}</span>")
+            self.log.append(INFO_READY)
         else:
             self.log.append(
-                f"<span style='color:red'>ffmpeg exited with code {code}. Check the log above for details.</span>"
+                f"<span style='color:red'>ffmpeg exited with code {code}."
+                " Check the log above for details.</span>"
             )
         self.start_btn.setEnabled(True)
+
+
+    def open_output_folder(self):
+        """Open the output directory in Windows Explorer."""
+        output_dir = os.path.dirname(self.current_output_file)
+        os.startfile(output_dir)
 
 
 def main():
