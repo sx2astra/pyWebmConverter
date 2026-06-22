@@ -243,6 +243,11 @@ class FFmpegGUI(QWidget):
         self.start_btn.clicked.connect(self.start_conversion)
         layout.addWidget(self.start_btn)
 
+        self.open_folder_btn = QPushButton("Open Output Folder")
+        self.open_folder_btn.clicked.connect(self.open_output_folder)
+        self.open_folder_btn.setVisible(False)
+        layout.addWidget(self.open_folder_btn)
+
         # Output log section
         self.log = QTextEdit()
         self.log.setReadOnly(True)
@@ -255,6 +260,7 @@ class FFmpegGUI(QWidget):
         fname, _ = QFileDialog.getOpenFileName(self, "Select Input Video")
         if fname:
             self.input_path.setText(fname)
+            self.file_name.setText(os.path.splitext(os.path.basename(fname))[0])
 
     def browse_output(self):
         """Open folder dialog to select output directory."""
@@ -457,6 +463,7 @@ class FFmpegGUI(QWidget):
         self.current_input_video = input_video
 
         # Start conversion
+        self.open_folder_btn.setVisible(False)
         self.start_btn.setEnabled(False)
         self.worker = FFmpegWorker(cmd, cmd_pass2)
         self.worker.log_signal.connect(self.log.append)
@@ -493,6 +500,17 @@ class FFmpegGUI(QWidget):
 
             self.log.append(f"<span style='color:green'>{INFO_FINAL_COMPLETE}</span>")
 
+            # Show file size summary
+            final_size_mb = os.path.getsize(self.current_output_file) / (1024 * 1024)
+            pct = (final_size_mb / self.current_target_size_mb) * 100
+            summary_color = "green" if final_size_mb <= self.current_target_size_mb else "red"
+            self.log.append(
+                f"<span style='color:{summary_color}'>"
+                f"Output: {final_size_mb:.2f} MB / {self.current_target_size_mb:.1f} MB"
+                f" target ({pct:.1f}%)</span>"
+            )
+            self.open_folder_btn.setVisible(True)
+
             # Clean up temporary ffmpeg files
             for temp_file in TEMP_LOG_FILES:
                 try:
@@ -520,6 +538,12 @@ class FFmpegGUI(QWidget):
                 " Check the log above for details.</span>"
             )
         self.start_btn.setEnabled(True)
+
+
+    def open_output_folder(self):
+        """Open the output directory in Windows Explorer."""
+        output_dir = os.path.dirname(self.current_output_file)
+        os.startfile(output_dir)
 
 
 def main():
