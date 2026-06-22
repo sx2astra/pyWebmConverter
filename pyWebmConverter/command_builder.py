@@ -22,9 +22,9 @@ from .constants import (
     SCALE_FACTOR_MODERATE,
     SCALE_FACTOR_LIGHT,
     SCALE_FACTOR_NATIVE,
-    MAXRATE_FACTOR_VERYSMALL_VP9,
-    MAXRATE_FACTOR_SMALL_VP9,
+    MAXRATE_FACTOR_VP9,
     MAXRATE_FACTOR_AV1,
+    VBV_BUFSIZE_MULTIPLIER,
     CPU_USED_2PASS,
     CPU_USED_1PASS,
     AV1_CPU_USED_2PASS,
@@ -61,21 +61,9 @@ def select_codec_and_factors(
         Tuple of (codec, cpu_used_2pass, cpu_used_1pass, tile_columns, maxrate_factor)
     """
     if allow_av1 and video_bitrate >= AV1_BITRATE_THRESHOLD:
-        return (
-            CODEC_AV1,
-            AV1_CPU_USED_2PASS,
-            AV1_CPU_USED_1PASS,
-            2,
-            MAXRATE_FACTOR_AV1,
-        )
+        return CODEC_AV1, AV1_CPU_USED_2PASS, AV1_CPU_USED_1PASS, 2, MAXRATE_FACTOR_AV1
 
-    # VP9 codec selection with adaptive rate control
-    if file_size_mb < FILESIZE_MEDIUM:
-        maxrate_factor = MAXRATE_FACTOR_VERYSMALL_VP9
-    else:
-        maxrate_factor = MAXRATE_FACTOR_SMALL_VP9
-
-    return CODEC_VP9, CPU_USED_2PASS, CPU_USED_1PASS, 1, maxrate_factor
+    return CODEC_VP9, CPU_USED_2PASS, CPU_USED_1PASS, 1, MAXRATE_FACTOR_VP9
 
 
 def get_auto_scale_factor(file_size_mb: float, video_bitrate: int) -> tuple[float, str]:
@@ -91,17 +79,17 @@ def get_auto_scale_factor(file_size_mb: float, video_bitrate: int) -> tuple[floa
     """
     if file_size_mb < FILESIZE_TINY:
         return SCALE_FACTOR_TINY, "0.2x (tiny file, critical compression)"
-    elif video_bitrate < VP9_ULTRA_LOW_THRESHOLD:
+    if video_bitrate < VP9_ULTRA_LOW_THRESHOLD:
         return SCALE_FACTOR_EXTREME, "0.25x (extremely low bitrate)"
-    elif (
+    if (
         file_size_mb < FILESIZE_VERY_SMALL and video_bitrate < VP9_LOW_THRESHOLD
     ) or video_bitrate < VP9_VERY_LOW_THRESHOLD:
         return SCALE_FACTOR_AGGRESSIVE, "0.35x (small file/very low bitrate)"
-    elif (
+    if (
         file_size_mb < FILESIZE_SMALL and video_bitrate < VP9_MODERATE_THRESHOLD
     ) or video_bitrate < VP9_LOW_THRESHOLD:
         return SCALE_FACTOR_MODERATE, "0.5x (low bitrate)"
-    elif (
+    if (
         file_size_mb < FILESIZE_MEDIUM and video_bitrate < VP9_GOOD_THRESHOLD
     ) or video_bitrate < VP9_MODERATE_THRESHOLD:
         return SCALE_FACTOR_LIGHT, "0.75x (moderate bitrate)"
@@ -111,16 +99,16 @@ def get_auto_scale_factor(file_size_mb: float, video_bitrate: int) -> tuple[floa
 
 def build_video_filters(
     scale_factor: float,
-    user_scale_factor: float = 1.0,
     rotation: int = 0,
+    target_height: int = None,
 ) -> str:
     """
     Build the video filter chain for scaling and rotation.
 
     Args:
-        scale_factor: Auto-calculated scale factor
-        user_scale_factor: User-provided scale factor from editor
+        scale_factor: Scale multiplier (ignored when target_height is set)
         rotation: Rotation angle (0, 90, 180, 270)
+        target_height: Pin output to this exact height; FFmpeg computes an even-valued width
 
     Returns:
         Comma-separated filter string
@@ -134,8 +122,11 @@ def build_video_filters(
             filters.append(rotation_filter)
 
     # Apply scaling
-    combined_scale_factor = scale_factor * user_scale_factor
-    scale_filter = f"scale=iw*{combined_scale_factor}:ih*{combined_scale_factor}"
+    if target_height is not None:
+        # -2 instructs FFmpeg to pick the nearest even width that preserves aspect ratio
+        scale_filter = f"scale=-2:{target_height}"
+    else:
+        scale_filter = f"scale=iw*{scale_factor}:ih*{scale_factor}"
     filters.append(scale_filter)
 
     return ",".join(filters)
@@ -215,7 +206,7 @@ def build_base_command(
         f"-pix_fmt yuv420p10le "
         f"-b:v {video_bitrate} "
         f"-maxrate {maxrate} "
-        f"-bufsize {maxrate}{undershoot} "
+        f"-bufsize {maxrate * VBV_BUFSIZE_MULTIPLIER}{undershoot} "
         f"-deadline {PACING_MODE} "
         f"-frame-parallel {FRAME_PARALLEL} "
         f"-row-mt {ROW_MT} "
@@ -254,6 +245,7 @@ def build_encoding_commands(
     filters: str,
     use_2pass: bool,
     trim_prefix: str = "",
+    title: str = "",
 ) -> tuple:
     """
     Build complete ffmpeg encoding commands for 1-pass or 2-pass encoding.
@@ -291,17 +283,18 @@ def build_encoding_commands(
     )
 
     audio_params = build_audio_params(audio_enabled, audio_bitrate)
+    metadata = f'-metadata title="{title}" ' if title else ""
 
     # Build pass commands
     if use_2pass:
         # Pass 1: No audio, only video
         cmd_pass1 = base_cmd + f"-pass 1 -f {OUTPUT_FORMAT} nul"
-        # Pass 2: Add audio and output
+        # Pass 2: Add audio, metadata, and output
         cmd_pass2 = (
-            base_cmd + f"-pass 2 {audio_params}" + f'-f {OUTPUT_FORMAT} "{output_file}"'
+            base_cmd + f"-pass 2 {audio_params}{metadata}" + f'-f {OUTPUT_FORMAT} "{output_file}"'
         )
         return cmd_pass1, cmd_pass2
 
-    # Single pass: Add audio and output
-    cmd = base_cmd + audio_params + f'-f {OUTPUT_FORMAT} "{output_file}"'
+    # Single pass: Add audio, metadata, and output
+    cmd = base_cmd + audio_params + metadata + f'-f {OUTPUT_FORMAT} "{output_file}"'
     return cmd, None

@@ -12,7 +12,7 @@ long_description = (
 
 setup(
     name="pyWebmConverter",
-    version="1.1.0",
+    version="1.2.0-dev",
     author="pyWebmConverter Contributors",
     description="A Python GUI application for converting video files to WebM format",
     long_description=long_description,

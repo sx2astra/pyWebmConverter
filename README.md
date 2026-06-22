@@ -5,12 +5,12 @@ A Python GUI application for converting video files to WebM format using FFmpeg 
 ## Features
 
 - 🎬 **Multiple Codec Support** - VP9 and AV1 video codecs
-- 🔊 **Audio Processing** - Opus audio codec with customizable bitrate
-- 🎨 **Video Editing** - Built-in video preview and scaling tools
-- ⚙️ **Quality Settings** - Low, Mid, and High quality presets
-- 📊 **Bitrate Control** - Manual and automatic bitrate calculation
+- 🔊 **Audio Processing** - Opus audio with binary-search bitrate targeting
+- 🎨 **Video Editing** - Built-in preview with trim, rotate, and frame-by-frame scrubbing
+- 📊 **Precise Size Targeting** - Bitrate algorithm with safety margins to reliably stay under the limit
 - 🖥️ **User-Friendly GUI** - Intuitive PyQt5 interface
 - 🚀 **Two-Pass Encoding** - Optional VP9 two-pass mode for better quality
+- 📁 **Smart Filename Handling** - Auto-populates output name from input; writes title to WebM metadata
 
 ## System Requirements
 
@@ -106,14 +106,16 @@ python -m pyWebmConverter.ffmpeg_gui
 3. **Configure Settings**:
    - **Output Path**: Directory where the converted WebM will be saved
    - **Output Filename**: Name for the output file (without extension)
-   - **Scale**: Manual scaling (Original, 75%, 50%) - auto-scaling also applies based on bitrate
+   - **Scale**: Choose Auto, or specific options:
+     - **Resolution**: 1080p, 720p, 480p (scales to target height)
+     - **Percentage**: 2x, 1.5x, 1.25x, 1x, 0.75x, 0.5x, 0.25x
    - **Target File Size**: Desired output file size in MB
    - **Override Target Size** (optional): Use a different size for bitrate calculation if overshooting
    - **Audio**: Enable audio with Opus codec or disable for video-only
    - **Codec**: VP9 (default, faster) or AV1 (better compression, slower)
    - **2-Pass Encoding**: Enable for better quality (VP9 only, slower)
 
-4. **Edit Video** (Optional): Click to trim, rotate (0°/90°/180°/270°), or scale before conversion
+4. **Edit Video** (Optional): Click to trim, rotate (0°/90°/180°/270°), or preview frame-by-frame before conversion
 
 5. **Convert**: Click "Start Conversion" to begin encoding
 
@@ -125,18 +127,27 @@ The application will:
 
 ### Advanced Features
 
-#### Video Editor (Trim, Rotate, Scale)
+#### Video Editor (Trim, Rotate)
+
 Click **"Edit Video"** to open the video editor dialog where you can:
-- **Preview** the video with frame-by-frame scrubbing
-- **Trim**: Set start time and duration
+
+- **Preview** the video with a timeline slider and **← Frame / Frame →** buttons for precise scrubbing
+- **Trim**: Set start and end frames via the spinboxes or by navigating to a frame and clicking **Set Start** / **Set End**
 - **Rotate**: Apply 0°, 90°, 180°, or 270° rotation
-- **Scale**: Adjust video scaling (0.2x to 1.0x)
+
+#### Resolution-Based Scaling
+Use the Scale dropdown to target specific resolutions:
+- **1080p**: Maintains aspect ratio, scales height to 1080 pixels
+- **720p**: Common streaming resolution, good for balancing quality and file size
+- **480p**: Highly compressed, suitable for very small file sizes
+
+Alternatively, use percentage-based scaling (2x, 1.5x, 0.75x, etc.) for more granular control.
 
 #### Audio Adjustment
 The application automatically adjusts audio bitrate to hit your target file size:
 - Extracts audio from the original video
-- Iteratively re-encodes with different bitrates (up to 25 attempts, 4 kbps steps)
-- Converges to within 5KB of your target size
+- Binary-searches between 8 and 128 kbps, converging in ~7 iterations
+- Keeps the highest bitrate that still fits under the target (never goes over)
 - Uses Opus codec for efficient audio compression
 
 #### Override Target Size for Bitrate
@@ -199,8 +210,8 @@ All settings are defined in [constants.py](pyWebmConverter/constants.py):
 
 5. **Audio Processing**
    - Extracts Opus audio from original video
-   - Iteratively adjusts bitrate (0.5 kbps steps, max 25 iterations)
-   - Re-muxes with final video to hit target size within 5KB tolerance
+   - Binary-searches 8–128 kbps range (~7 iterations) for the highest bitrate under the size limit
+   - Re-muxes with final video; never exceeds the target
 
 ### File Size Targeting
 
@@ -267,4 +278,4 @@ For issues, feature requests, or questions:
 
 ---
 
-**Latest Version**: 1.1.0 "XenialXuixo"
+**Latest Version**: 1.2.0 "WhimsicalWispa"

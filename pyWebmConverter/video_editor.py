@@ -45,7 +45,6 @@ class VideoEditorDialog(QDialog):
         self.start_frame = 0
         self.end_frame = self.total_frames - 1
         self.rotation = 0  # 0, 90, 180, 270
-        self.scale_factor = 1.0
 
         # Timer for playback
         self.play_timer = QTimer()
@@ -81,9 +80,15 @@ class VideoEditorDialog(QDialog):
 
         # Playback controls
         playback_layout = QHBoxLayout()
+        prev_btn = QPushButton("← Frame")
+        prev_btn.clicked.connect(self.prev_frame)
+        playback_layout.addWidget(prev_btn)
         self.play_btn = QPushButton("Play")
         self.play_btn.clicked.connect(self.toggle_play)
         playback_layout.addWidget(self.play_btn)
+        next_btn = QPushButton("Frame →")
+        next_btn.clicked.connect(self.next_frame)
+        playback_layout.addWidget(next_btn)
         layout.addLayout(playback_layout)
 
         # Trim section
@@ -94,6 +99,9 @@ class VideoEditorDialog(QDialog):
         self.trim_start.setMaximum(self.total_frames - 1)
         self.trim_start.valueChanged.connect(self.on_trim_changed)
         trim_layout.addWidget(self.trim_start)
+        set_start_btn = QPushButton("Set Start")
+        set_start_btn.clicked.connect(self.set_start_frame)
+        trim_layout.addWidget(set_start_btn)
 
         trim_layout.addWidget(QLabel("Trim End (frame):"))
         self.trim_end = QSpinBox()
@@ -102,6 +110,9 @@ class VideoEditorDialog(QDialog):
         self.trim_end.setValue(self.total_frames - 1)
         self.trim_end.valueChanged.connect(self.on_trim_changed)
         trim_layout.addWidget(self.trim_end)
+        set_end_btn = QPushButton("Set End")
+        set_end_btn.clicked.connect(self.set_end_frame)
+        trim_layout.addWidget(set_end_btn)
         layout.addLayout(trim_layout)
 
         # Rotation section
@@ -112,17 +123,6 @@ class VideoEditorDialog(QDialog):
         self.rotation_combo.currentIndexChanged.connect(self.on_rotation_changed)
         rotation_layout.addWidget(self.rotation_combo)
         layout.addLayout(rotation_layout)
-
-        # Scale section
-        scale_layout = QHBoxLayout()
-        scale_layout.addWidget(QLabel("Scale (%):"))
-        self.scale_spin = QSpinBox()
-        self.scale_spin.setMinimum(10)
-        self.scale_spin.setMaximum(400)
-        self.scale_spin.setValue(100)
-        self.scale_spin.valueChanged.connect(self.on_scale_changed)
-        scale_layout.addWidget(self.scale_spin)
-        layout.addLayout(scale_layout)
 
         # Buttons
         button_layout = QHBoxLayout()
@@ -149,13 +149,6 @@ class VideoEditorDialog(QDialog):
                 frame = cv2.rotate(frame, cv2.ROTATE_180)
             elif self.rotation == 270:
                 frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
-
-            # Apply scale
-            if self.scale_factor != 1.0:
-                h, w = frame.shape[:2]
-                new_w = int(w * self.scale_factor)
-                new_h = int(h * self.scale_factor)
-                frame = cv2.resize(frame, (new_w, new_h))
 
             # Convert BGR to RGB and display
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -227,11 +220,6 @@ class VideoEditorDialog(QDialog):
         self.rotation = index * 90
         self.update_frame()
 
-    def on_scale_changed(self, value):
-        """Handle scale changes."""
-        self.scale_factor = value / 100.0
-        self.update_frame()
-
     def get_edit_values(self) -> dict:
         """Return the edited values."""
         start_time = self.start_frame / self.fps
@@ -240,8 +228,33 @@ class VideoEditorDialog(QDialog):
             "start_time": start_time,
             "duration": duration,
             "rotation": self.rotation,
-            "scale_factor": self.scale_factor,
         }
+
+    def prev_frame(self):
+        """Step back one frame and pause."""
+        self.play_timer.stop()
+        self.is_playing = False
+        self.play_btn.setText("Play")
+        if self.current_frame > 0:
+            self.current_frame -= 1
+            self.update_frame()
+
+    def next_frame(self):
+        """Step forward one frame and pause."""
+        self.play_timer.stop()
+        self.is_playing = False
+        self.play_btn.setText("Play")
+        if self.current_frame < self.total_frames - 1:
+            self.current_frame += 1
+            self.update_frame()
+
+    def set_start_frame(self):
+        """Set trim start to the current frame."""
+        self.trim_start.setValue(self.current_frame)
+
+    def set_end_frame(self):
+        """Set trim end to the current frame."""
+        self.trim_end.setValue(self.current_frame)
 
     def closeEvent(self, event):
         """Clean up timer on close."""

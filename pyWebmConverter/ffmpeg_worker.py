@@ -73,7 +73,8 @@ class FFmpegWorker(QThread):
 
         except FileNotFoundError:
             self.log_signal.emit(
-                "<span style='color:red'>Error: ffmpeg.exe not found. Please ensure it is in the same directory or in your PATH.</span>"
+                "<span style='color:red'>Error: ffmpeg.exe not found."
+                " Please ensure it is in the same directory or in your PATH.</span>"
             )
             self.finished_signal.emit(False, -1)
         except Exception as e:
