@@ -479,9 +479,7 @@ class FFmpegGUI(QWidget):
             code: Exit code from ffmpeg
         """
         if success:
-            self.log.append(
-                f"<span style='color:green'>{INFO_ENCODING_COMPLETE}</span>"
-            )
+            self.log.append(INFO_ENCODING_COMPLETE)
 
             # Adjust audio bitrate if audio is enabled
             if hasattr(self, "current_audio") and self.current_audio == "on":
@@ -498,7 +496,7 @@ class FFmpegGUI(QWidget):
                     INFO_AUDIO_ADJUSTMENT_COMPLETE.format(final_audio_bitrate)
                 )
 
-            self.log.append(f"<span style='color:green'>{INFO_FINAL_COMPLETE}</span>")
+            self.log.append(INFO_FINAL_COMPLETE)
 
             # Show file size summary
             final_size_mb = os.path.getsize(self.current_output_file) / (1024 * 1024)
@@ -516,7 +514,7 @@ class FFmpegGUI(QWidget):
                 try:
                     if os.path.exists(temp_file):
                         os.remove(temp_file)
-                except Exception as e:
+                except OSError as e:
                     self.log.append(
                         f"<span style='color:orange'>"
                         f"Warning: Could not delete {temp_file}: {e}</span>"
@@ -531,7 +529,7 @@ class FFmpegGUI(QWidget):
                 "duration": None,
                 "rotation": 0,
             }
-            self.log.append(f"<span style='color:blue'>{INFO_READY}</span>")
+            self.log.append(INFO_READY)
         else:
             self.log.append(
                 f"<span style='color:red'>ffmpeg exited with code {code}."
