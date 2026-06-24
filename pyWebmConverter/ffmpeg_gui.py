@@ -17,6 +17,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QProgressBar,
     QFileDialog,
     QVBoxLayout,
     QHBoxLayout,
@@ -25,7 +26,7 @@ from PyQt5.QtWidgets import (
     QDialog,
     QCheckBox,
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QSettings
 
 # Import from modular components
 from .video_editor import VideoEditorDialog
@@ -39,7 +40,6 @@ from .command_builder import (
 )
 from .constants import (
     DEFAULT_FILE_SIZE_MB,
-    DEFAULT_AUDIO,
     DEFAULT_AUDIO_OPTIONS,
     DEFAULT_SCALE_OPTIONS,
     DEFAULT_2PASS,
@@ -87,7 +87,7 @@ def get_video_duration(input_path: str) -> float:
         Duration in seconds, or None if unable to determine
     """
     cmd = ["ffmpeg", "-i", input_path]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
     output = proc.stderr  # Duration info is in stderr
     match = re.search(r"Duration: (\d+):(\d+):(\d+\.\d+)", output)
     if match:
@@ -120,7 +120,8 @@ def get_video_dimensions(input_path: str) -> tuple:
     ]
     try:
         proc = subprocess.run(
-            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace"
+            cmd, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", check=False,
         )
     except FileNotFoundError:
         return None, None
@@ -147,13 +148,22 @@ class FFmpegGUI(QWidget):
     def __init__(self):
         """Initialize the GUI window."""
         super().__init__()
-        # Store editor results
+        self.setAcceptDrops(True)
         self.editor_values = {
             "start_time": None,
             "duration": None,
             "rotation": 0,
+            "crop": None,
         }
+        # Conversion state — populated in start_conversion, read in on_conversion_finished
+        self.current_output_file = None
+        self.current_audio = None
+        self.current_target_size_mb = None
+        self.current_trim_prefix = None
+        self.current_input_video = None
+        self.worker = None
         self.init_ui()
+        self._load_settings()
 
     def init_ui(self):
         """Set up all UI elements."""
@@ -239,9 +249,21 @@ class FFmpegGUI(QWidget):
         layout.addWidget(self.twopass_checkbox)
 
         # Start button
+        start_cancel_layout = QHBoxLayout()
         self.start_btn = QPushButton("Start Conversion")
         self.start_btn.clicked.connect(self.start_conversion)
-        layout.addWidget(self.start_btn)
+        start_cancel_layout.addWidget(self.start_btn)
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.clicked.connect(self.cancel_conversion)
+        self.cancel_btn.setVisible(False)
+        start_cancel_layout.addWidget(self.cancel_btn)
+        layout.addLayout(start_cancel_layout)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMinimum(0)
+        self.progress_bar.setMaximum(100)
+        self.progress_bar.setVisible(False)
+        layout.addWidget(self.progress_bar)
 
         self.open_folder_btn = QPushButton("Open Output Folder")
         self.open_folder_btn.clicked.connect(self.open_output_folder)
@@ -255,12 +277,27 @@ class FFmpegGUI(QWidget):
 
         self.setLayout(layout)
 
+    def dragEnterEvent(self, event):
+        """Accept drag events that carry a local video file."""
+        if event.mimeData().hasUrls() and event.mimeData().urls()[0].isLocalFile():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        """Handle a dropped file the same way as Browse."""
+        fname = event.mimeData().urls()[0].toLocalFile()
+        self.input_path.setText(fname)
+        self.file_name.setText(os.path.splitext(os.path.basename(fname))[0])
+        self._reset_editor_values()
+
     def browse_input(self):
         """Open file dialog to select input video."""
         fname, _ = QFileDialog.getOpenFileName(self, "Select Input Video")
         if fname:
             self.input_path.setText(fname)
             self.file_name.setText(os.path.splitext(os.path.basename(fname))[0])
+            self._reset_editor_values()
 
     def browse_output(self):
         """Open folder dialog to select output directory."""
@@ -275,8 +312,8 @@ class FFmpegGUI(QWidget):
             self.log.append(f"<span style='color:red'>{ERROR_NO_INPUT}</span>")
             return
 
-        # Open video editor dialog
-        editor = VideoEditorDialog(input_video, self)
+        # Open video editor dialog, restoring previous edit values
+        editor = VideoEditorDialog(input_video, self, initial_values=self.editor_values)
         if editor.exec_() == QDialog.Accepted:
             self.editor_values = editor.get_edit_values()
             start = self.editor_values["start_time"]
@@ -377,7 +414,7 @@ class FFmpegGUI(QWidget):
         allow_av1 = self.av1_checkbox.isChecked()
         use_2pass = self.twopass_checkbox.isChecked()
         codec, cpu_used_2pass, cpu_used_1pass, tile_columns, maxrate_factor = (
-            select_codec_and_factors(file_size_mb, video_bitrate, allow_av1)
+            select_codec_and_factors(video_bitrate, allow_av1)
         )
 
         # Parse scale and intelligently adjust
@@ -412,6 +449,7 @@ class FFmpegGUI(QWidget):
             factor,
             self.editor_values["rotation"],
             target_height=res_target_height,
+            crop=self.editor_values["crop"],
         )
 
         # Build ffmpeg commands
@@ -463,10 +501,15 @@ class FFmpegGUI(QWidget):
         self.current_input_video = input_video
 
         # Start conversion
+        self._save_settings()
         self.open_folder_btn.setVisible(False)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setVisible(True)
         self.start_btn.setEnabled(False)
-        self.worker = FFmpegWorker(cmd, cmd_pass2)
+        self.cancel_btn.setVisible(True)
+        self.worker = FFmpegWorker(cmd, cmd_pass2, duration_s=duration_s)
         self.worker.log_signal.connect(self.log.append)
+        self.worker.progress_signal.connect(self.progress_bar.setValue)
         self.worker.finished_signal.connect(self.on_conversion_finished)
         self.worker.start()
 
@@ -523,20 +566,51 @@ class FFmpegGUI(QWidget):
             # Reset input fields for next conversion
             self.input_path.clear()
             self.file_name.clear()
-            # Reset editor values
-            self.editor_values = {
-                "start_time": None,
-                "duration": None,
-                "rotation": 0,
-            }
             self.log.append(INFO_READY)
         else:
             self.log.append(
                 f"<span style='color:red'>ffmpeg exited with code {code}."
                 " Check the log above for details.</span>"
             )
+        self.progress_bar.setVisible(False)
+        self.cancel_btn.setVisible(False)
         self.start_btn.setEnabled(True)
 
+    def _load_settings(self):
+        """Restore persisted settings from the previous session."""
+        s = QSettings("pyWebmConverter", "pyWebmConverter")
+        out = s.value("out_path", "")
+        if out:
+            self.out_path.setText(out)
+        self.file_size_input.setText(s.value("file_size", str(DEFAULT_FILE_SIZE_MB)))
+        self.audio_combo.setCurrentIndex(int(s.value("audio_index", 0)))
+        self.scale_combo.setCurrentIndex(int(s.value("scale_index", 0)))
+        self.twopass_checkbox.setChecked(s.value("use_2pass", DEFAULT_2PASS, type=bool))
+        self.av1_checkbox.setChecked(s.value("allow_av1", DEFAULT_AV1, type=bool))
+
+    def _save_settings(self):
+        """Persist current settings for the next session."""
+        s = QSettings("pyWebmConverter", "pyWebmConverter")
+        s.setValue("out_path", self.out_path.text().strip())
+        s.setValue("file_size", self.file_size_input.text().strip())
+        s.setValue("audio_index", self.audio_combo.currentIndex())
+        s.setValue("scale_index", self.scale_combo.currentIndex())
+        s.setValue("use_2pass", self.twopass_checkbox.isChecked())
+        s.setValue("allow_av1", self.av1_checkbox.isChecked())
+
+    def cancel_conversion(self):
+        """Cancel the running ffmpeg process."""
+        if self.worker:
+            self.worker.cancel()
+
+    def _reset_editor_values(self):
+        """Clear trim/crop/rotation state when a new input file is chosen."""
+        self.editor_values = {
+            "start_time": None,
+            "duration": None,
+            "rotation": 0,
+            "crop": None,
+        }
 
     def open_output_folder(self):
         """Open the output directory in Windows Explorer."""

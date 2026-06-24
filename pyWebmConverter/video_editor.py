@@ -1,6 +1,5 @@
 """
-Video editor dialog for trimming, rotating, and scaling videos.
-Provides preview and editing capabilities for WebM conversion.
+Video editor dialog for trimming, rotating, cropping, and previewing videos.
 """
 
 import cv2
@@ -11,46 +10,110 @@ from PyQt5.QtWidgets import (
     QSlider,
     QSpinBox,
     QComboBox,
+    QSizePolicy,
     QVBoxLayout,
     QHBoxLayout,
 )
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QPixmap, QImage
-from .constants import VIDEO_EDITOR_WIDTH, VIDEO_EDITOR_HEIGHT, VIDEO_PREVIEW_WIDTH
+from PyQt5.QtCore import Qt, QTimer, QRect, pyqtSignal
+from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen
+from .constants import (
+    VIDEO_EDITOR_WIDTH,
+    VIDEO_EDITOR_HEIGHT,
+    VIDEO_PREVIEW_WIDTH,
+    VIDEO_PREVIEW_MAX_FPS,
+    VIDEO_SEEK_DEBOUNCE_MS,
+)
+
+
+class CropLabel(QLabel):
+    """
+    QLabel subclass that lets the user drag a crop rectangle over the video preview.
+    Emits crop_changed with a QRect in display coordinates, or None when cleared.
+    """
+
+    crop_changed = pyqtSignal(object)
+
+    def __init__(self):
+        super().__init__()
+        self._start = None
+        self._rect = None
+
+    def mousePressEvent(self, event):
+        """Begin a new crop selection on left-click."""
+        if event.button() == Qt.LeftButton:
+            self._start = event.pos()
+            self._rect = None
+            self.update()
+
+    def mouseMoveEvent(self, event):
+        """Extend the crop rectangle while the button is held."""
+        if event.buttons() & Qt.LeftButton and self._start is not None:
+            self._rect = QRect(self._start, event.pos()).normalized()
+            self.update()
+
+    def mouseReleaseEvent(self, event):
+        """Finalise the crop rectangle and emit crop_changed."""
+        if event.button() == Qt.LeftButton and self._start is not None:
+            self._rect = QRect(self._start, event.pos()).normalized()
+            self._start = None
+            self.update()
+            self.crop_changed.emit(self._rect)
+
+    def clear_crop(self):
+        """Remove the current crop selection."""
+        self._rect = None
+        self._start = None
+        self.update()
+        self.crop_changed.emit(None)
+
+    def paintEvent(self, event):
+        """Draw the crop overlay on top of the video frame."""
+        super().paintEvent(event)
+        if self._rect and not self._rect.isEmpty():
+            painter = QPainter(self)
+            painter.setPen(QPen(Qt.yellow, 2, Qt.DashLine))
+            painter.drawRect(self._rect)
+            painter.end()
 
 
 class VideoEditorDialog(QDialog):
     """
     A separate dialog for video preview and editing.
-    Allows users to trim, rotate, and scale video clips.
+    Allows users to trim, rotate, and crop video clips.
     """
 
-    def __init__(self, video_path, parent=None):
-        """
-        Initialize the video editor dialog.
-
-        Args:
-            video_path: Path to the video file
-            parent: Parent widget
-        """
+    def __init__(self, video_path, parent=None, initial_values=None):
         super().__init__(parent)
         self.video_path = video_path
         self.cap = cv2.VideoCapture(video_path)
         self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self.fps = self.cap.get(cv2.CAP_PROP_FPS)
+        self.orig_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.orig_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.current_frame = 0
         self.is_playing = False
 
-        # Edit settings
         self.start_frame = 0
         self.end_frame = self.total_frames - 1
-        self.rotation = 0  # 0, 90, 180, 270
+        self.rotation = 0
+        self.crop = None  # (x, y, w, h) in original video pixels
+        self._render_w = VIDEO_PREVIEW_WIDTH  # actual rendered pixmap width (updated each frame)
+        self._render_h = 0
 
-        # Timer for playback
         self.play_timer = QTimer()
         self.play_timer.timeout.connect(self.play_video)
 
+        # Debounce slider seeking — avoids hammering the decoder on every drag pixel
+        self._pending_frame = 0
+        self._seek_timer = QTimer()
+        self._seek_timer.setSingleShot(True)
+        self._seek_timer.timeout.connect(self._seek_to_pending)
+
+        self._frames_per_tick = 1  # updated in toggle_play based on source fps
+
         self.init_ui()
+        if initial_values:
+            self._restore_values(initial_values)
         self.update_frame()
 
     def init_ui(self):
@@ -60,10 +123,13 @@ class VideoEditorDialog(QDialog):
         layout = QVBoxLayout()
 
         # Video display
-        self.video_label = QLabel()
-        self.video_label.setMinimumSize(640, 480)
+        self.video_label = CropLabel()
+        self.video_label.setMinimumSize(VIDEO_PREVIEW_WIDTH, 240)
+        self.video_label.setAlignment(Qt.AlignCenter)
         self.video_label.setStyleSheet("background-color: black;")
-        layout.addWidget(self.video_label)
+        self.video_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.video_label.crop_changed.connect(self.on_crop_changed)
+        layout.addWidget(self.video_label, stretch=1)
 
         # Timeline slider
         timeline_layout = QHBoxLayout()
@@ -115,6 +181,17 @@ class VideoEditorDialog(QDialog):
         trim_layout.addWidget(set_end_btn)
         layout.addLayout(trim_layout)
 
+        # Crop section
+        crop_layout = QHBoxLayout()
+        crop_layout.addWidget(QLabel("Crop:"))
+        self.crop_info_label = QLabel("None — drag on the preview to set a crop region")
+        crop_layout.addWidget(self.crop_info_label)
+        crop_layout.addStretch()
+        clear_crop_btn = QPushButton("Clear Crop")
+        clear_crop_btn.clicked.connect(self.video_label.clear_crop)
+        crop_layout.addWidget(clear_crop_btn)
+        layout.addLayout(crop_layout)
+
         # Rotation section
         rotation_layout = QHBoxLayout()
         rotation_layout.addWidget(QLabel("Rotation:"))
@@ -142,7 +219,6 @@ class VideoEditorDialog(QDialog):
         ret, frame = self.cap.read()
 
         if ret:
-            # Apply rotation
             if self.rotation == 90:
                 frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
             elif self.rotation == 180:
@@ -150,27 +226,76 @@ class VideoEditorDialog(QDialog):
             elif self.rotation == 270:
                 frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
-            # Convert BGR to RGB and display
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            h, w, ch = frame_rgb.shape
-            bytes_per_line = ch * w
-            qt_image = QImage(
-                frame_rgb.data, w, h, bytes_per_line, QImage.Format_RGB888
+            src_h, src_w = frame_rgb.shape[:2]
+            label_w = max(self.video_label.width(), VIDEO_PREVIEW_WIDTH)
+            label_h = max(self.video_label.height(), 240)
+            scale = min(label_w / src_w, label_h / src_h)
+            preview_w = max(1, int(src_w * scale))
+            preview_h = max(1, int(src_h * scale))
+            self._render_w = preview_w
+            self._render_h = preview_h
+            frame_small = cv2.resize(
+                frame_rgb, (preview_w, preview_h), interpolation=cv2.INTER_AREA
             )
-            pixmap = QPixmap.fromImage(qt_image)
-            scaled_pixmap = pixmap.scaledToWidth(VIDEO_PREVIEW_WIDTH)
-            self.video_label.setPixmap(scaled_pixmap)
+            ph, pw, ch = frame_small.shape
+            qt_image = QImage(frame_small.data, pw, ph, ch * pw, QImage.Format_RGB888)
+            self.video_label.setPixmap(QPixmap.fromImage(qt_image))
 
             self.timeline.blockSignals(True)
             self.timeline.setValue(self.current_frame)
             self.timeline.blockSignals(False)
             self.frame_label.setText(f"{self.current_frame}/{self.total_frames}")
 
+    def on_crop_changed(self, rect):
+        """Convert display-coordinate crop rect to original video coordinates."""
+        if rect is None or rect.isEmpty():
+            self.crop = None
+            self.crop_info_label.setText(
+                "None — drag on the preview to set a crop region"
+            )
+            return
+
+        # The pixmap is centered inside the label — subtract the centering offset
+        x_offset = max(0, (self.video_label.width() - self._render_w) // 2)
+        y_offset = max(0, (self.video_label.height() - self._render_h) // 2)
+        scale = self.orig_width / self._render_w
+
+        def to_even(n):
+            return (int(n) >> 1) << 1
+
+        x = to_even((rect.x() - x_offset) * scale)
+        y = to_even((rect.y() - y_offset) * scale)
+        w = to_even(rect.width() * scale)
+        h = to_even(rect.height() * scale)
+
+        # Clamp to video bounds
+        x = max(0, min(x, self.orig_width - 2))
+        y = max(0, min(y, self.orig_height - 2))
+        w = min(w, self.orig_width - x)
+        h = min(h, self.orig_height - y)
+
+        if w >= 2 and h >= 2:
+            self.crop = (x, y, w, h)
+            self.crop_info_label.setText(f"{w}×{h} at ({x}, {y})")
+        else:
+            self.crop = None
+            self.crop_info_label.setText(
+                "None — drag on the preview to set a crop region"
+            )
+
     def on_timeline_moved(self, position):
-        """Handle timeline slider movement."""
+        """Update the frame counter immediately; debounce the actual seek."""
         self.is_playing = False
         self.play_btn.setText("Play")
-        self.current_frame = position
+        self.play_timer.stop()
+        self._pending_frame = position
+        self.frame_label.setText(f"{position}/{self.total_frames}")
+        self._seek_timer.start(VIDEO_SEEK_DEBOUNCE_MS)
+
+    def _seek_to_pending(self):
+        """Perform the deferred frame seek after the slider settles."""
+        self.current_frame = self._pending_frame
         self.update_frame()
 
     def toggle_play(self):
@@ -182,14 +307,17 @@ class VideoEditorDialog(QDialog):
         else:
             self.is_playing = True
             self.play_btn.setText("Pause")
-            # Start timer with frame interval (in milliseconds)
-            frame_interval = int(1000 / self.fps)
-            self.play_timer.start(frame_interval)
+            # Cap preview fps; advance multiple source frames per tick to compensate
+            preview_fps = min(self.fps, VIDEO_PREVIEW_MAX_FPS)
+            self._frames_per_tick = max(1, round(self.fps / preview_fps))
+            self.play_timer.start(int(1000 / preview_fps))
 
     def play_video(self):
-        """Play video frames."""
+        """Advance by _frames_per_tick source frames during playback."""
         if self.is_playing and self.current_frame < self.end_frame:
-            self.current_frame += 1
+            self.current_frame = min(
+                self.current_frame + self._frames_per_tick, self.end_frame
+            )
             self.update_frame()
         else:
             self.play_timer.stop()
@@ -197,38 +325,9 @@ class VideoEditorDialog(QDialog):
             self.play_btn.setText("Play")
 
     def on_trim_changed(self):
-        """Handle trim value changes."""
+        """Handle trim spinbox changes."""
         self.start_frame = self.trim_start.value()
         self.end_frame = self.trim_end.value()
-
-    def apply_and_close(self):
-        """Validate trim values and close dialog if valid."""
-        self.start_frame = self.trim_start.value()
-        self.end_frame = self.trim_end.value()
-
-        # Validate that start frame is not higher than end frame
-        if self.start_frame > self.end_frame:
-            # Auto-correct by swapping them
-            self.start_frame, self.end_frame = self.end_frame, self.start_frame
-            self.trim_start.setValue(self.start_frame)
-            self.trim_end.setValue(self.end_frame)
-
-        self.accept()
-
-    def on_rotation_changed(self, index):
-        """Handle rotation changes."""
-        self.rotation = index * 90
-        self.update_frame()
-
-    def get_edit_values(self) -> dict:
-        """Return the edited values."""
-        start_time = self.start_frame / self.fps
-        duration = (self.end_frame - self.start_frame) / self.fps
-        return {
-            "start_time": start_time,
-            "duration": duration,
-            "rotation": self.rotation,
-        }
 
     def prev_frame(self):
         """Step back one frame and pause."""
@@ -255,6 +354,68 @@ class VideoEditorDialog(QDialog):
     def set_end_frame(self):
         """Set trim end to the current frame."""
         self.trim_end.setValue(self.current_frame)
+
+    def apply_and_close(self):
+        """Validate trim values and close dialog if valid."""
+        self.start_frame = self.trim_start.value()
+        self.end_frame = self.trim_end.value()
+
+        if self.start_frame > self.end_frame:
+            self.start_frame, self.end_frame = self.end_frame, self.start_frame
+            self.trim_start.setValue(self.start_frame)
+            self.trim_end.setValue(self.end_frame)
+
+        self.accept()
+
+    def on_rotation_changed(self, index):
+        """Handle rotation changes."""
+        self.rotation = index * 90
+        self.update_frame()
+
+    def _restore_values(self, values: dict):
+        """Restore trim, rotation, and crop from a previous session."""
+        fps = self.fps or 1
+        start_time = values.get("start_time")
+        duration = values.get("duration")
+        if start_time is not None and duration is not None:
+            start = max(0, min(int(start_time * fps), self.total_frames - 1))
+            end = max(0, min(int((start_time + duration) * fps), self.total_frames - 1))
+            self.trim_start.setValue(start)
+            self.trim_end.setValue(end)
+            self.start_frame = start
+            self.end_frame = end
+            self.current_frame = start
+
+        rotation = values.get("rotation", 0)
+        rotation_index = {0: 0, 90: 1, 180: 2, 270: 3}.get(rotation, 0)
+        self.rotation_combo.setCurrentIndex(rotation_index)
+        self.rotation = rotation
+
+        self.crop = values.get("crop")
+        if self.crop:
+            x, y, w, h = self.crop
+            self.crop_info_label.setText(f"{w}×{h} at ({x}, {y})")
+
+    def keyPressEvent(self, event):
+        """Keyboard shortcuts: Space=play/pause, Left=prev frame, Right=next frame."""
+        key = event.key()
+        if key == Qt.Key_Space:
+            self.toggle_play()
+        elif key == Qt.Key_Left:
+            self.prev_frame()
+        elif key == Qt.Key_Right:
+            self.next_frame()
+        else:
+            super().keyPressEvent(event)
+
+    def get_edit_values(self) -> dict:
+        """Return the edited values."""
+        return {
+            "start_time": self.start_frame / self.fps,
+            "duration": (self.end_frame - self.start_frame) / self.fps,
+            "rotation": self.rotation,
+            "crop": self.crop,
+        }
 
     def closeEvent(self, event):
         """Clean up timer on close."""

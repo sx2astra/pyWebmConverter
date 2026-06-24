@@ -46,14 +46,11 @@ from .constants import (
 )
 
 
-def select_codec_and_factors(
-    file_size_mb: float, video_bitrate: int, allow_av1: bool
-) -> tuple:
+def select_codec_and_factors(video_bitrate: int, allow_av1: bool) -> tuple:
     """
-    Select the best codec and rate control factors based on bitrate and file size.
+    Select the best codec and rate control factors based on bitrate.
 
     Args:
-        file_size_mb: Target file size in MB
         video_bitrate: Video bitrate in bits per second
         allow_av1: Whether AV1 codec is allowed
 
@@ -101,27 +98,32 @@ def build_video_filters(
     scale_factor: float,
     rotation: int = 0,
     target_height: int = None,
+    crop: tuple = None,
 ) -> str:
     """
-    Build the video filter chain for scaling and rotation.
+    Build the video filter chain for crop, rotation, and scaling.
 
     Args:
         scale_factor: Scale multiplier (ignored when target_height is set)
         rotation: Rotation angle (0, 90, 180, 270)
         target_height: Pin output to this exact height; FFmpeg computes an even-valued width
+        crop: (x, y, w, h) in original video pixels; applied before rotation/scale
 
     Returns:
         Comma-separated filter string
     """
     filters = []
 
-    # Apply rotation if specified
+    # Crop first so rotation/scale operate on the already-cropped frame
+    if crop:
+        x, y, w, h = crop
+        filters.append(f"crop={w}:{h}:{x}:{y}")
+
     if rotation > 0:
         rotation_filter = ROTATION_ANGLES.get(rotation)
         if rotation_filter:
             filters.append(rotation_filter)
 
-    # Apply scaling
     if target_height is not None:
         # -2 instructs FFmpeg to pick the nearest even width that preserves aspect ratio
         scale_filter = f"scale=-2:{target_height}"

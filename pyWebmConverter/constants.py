@@ -31,11 +31,13 @@ SCALE_FACTOR_NATIVE = 1.0  # No scaling
 
 # Audio configuration
 AUDIO_CODEC = "libopus"
-AUDIO_INITIAL_BITRATE = 96   # kbps — binary search starting midpoint
-AUDIO_DEFAULT_BITRATE = 96000  # bps budgeted for audio during video encode (matches above)
-AUDIO_MIN_BITRATE_KBPS = 8    # binary search lower bound
+AUDIO_INITIAL_BITRATE = 96  # kbps — binary search starting midpoint
+AUDIO_DEFAULT_BITRATE = (
+    96000  # bps budgeted for audio during video encode (matches above)
+)
+AUDIO_MIN_BITRATE_KBPS = 8  # binary search lower bound
 AUDIO_MAX_BITRATE_KBPS = 128  # binary search upper bound — Opus at 128 is transparent
-AUDIO_BITRATE_STEP = 4        # kbps — binary search stops when range < this
+AUDIO_BITRATE_STEP = 4  # kbps — binary search stops when range < this
 
 # Audio adjustment parameters
 AUDIO_ADJUSTMENT_MAX_ATTEMPTS = 12  # binary search converges in ~log2(312/4) ≈ 7 steps
@@ -43,10 +45,10 @@ AUDIO_EXTRACTION_FORMAT = "libopus"
 
 # Bitrate safety margins — reserve headroom for container overhead + rate control variance.
 # Applied directly to the bit budget so encoder parameters stay correct.
-SAFETY_MARGIN_LARGE = 0.98   # >= 8MB  : 2% reserve
+SAFETY_MARGIN_LARGE = 0.98  # >= 8MB  : 2% reserve
 SAFETY_MARGIN_MEDIUM = 0.97  # 4–8MB  : 3% reserve
-SAFETY_MARGIN_SMALL = 0.96   # 2–4MB  : 4% reserve
-SAFETY_MARGIN_TINY = 0.94    # < 2MB  : 6% reserve (container overhead is bigger %)
+SAFETY_MARGIN_SMALL = 0.96  # 2–4MB  : 4% reserve
+SAFETY_MARGIN_TINY = 0.94  # < 2MB  : 6% reserve (container overhead is bigger %)
 
 # Rate control settings
 # maxrate == video_bitrate: the safety margin in the budget is what keeps us under,
@@ -111,7 +113,9 @@ DEFAULT_AV1 = False
 # Video editor settings
 VIDEO_EDITOR_WIDTH = 900
 VIDEO_EDITOR_HEIGHT = 700
-VIDEO_PREVIEW_WIDTH = 640
+VIDEO_PREVIEW_WIDTH = 480
+VIDEO_PREVIEW_MAX_FPS = 60  # cap preview playback; skips source frames to compensate
+VIDEO_SEEK_DEBOUNCE_MS = 25  # slider settle time before issuing a cv2 seek
 
 # Temporary file settings
 TEMP_FILE_PREFIX = "temp__"
