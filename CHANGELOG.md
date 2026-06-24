@@ -7,6 +7,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0-dev] "VictoriousVla" - Unreleased
+
+### Added
+
+- Encoding progress bar (0–100%, two-pass aware: pass 1 fills 0–50%, pass 2 fills 50–100%)
+- Cancel button during encoding — terminates the running FFmpeg process immediately
+- Drag & drop input file onto the main window
+- Crop tool in the video editor — drag a selection on the preview to set a crop region
+- Keyboard shortcuts in the video editor: Space = play/pause, ← = previous frame, → = next frame
+- Video editor restores previous trim, crop, and rotation when reopened for the same file
+- Trim, crop, and rotation settings are preserved across conversions; only reset when a new input file is selected
+
+### Changed
+
+- Video editor preview now fills and centres within the dialog window (expands with resize)
+- Preview performance: scaling moved from Qt to cv2 before QImage creation, reducing memory bandwidth
+- Preview playback capped at 60 fps with source-frame skipping to compensate for high-fps sources
+- Timeline slider seek debounced (25 ms) to avoid hammering the decoder on every drag pixel
+- Settings (output directory, file size, audio, scale, 2-pass, AV1) now persisted between sessions via QSettings
+
+---
+
 ## [1.2.0] "WhimsicalWispa" - 2026-06-22
 
 ### Added
