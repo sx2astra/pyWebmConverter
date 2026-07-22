@@ -117,6 +117,10 @@ VIDEO_PREVIEW_WIDTH = 480
 VIDEO_PREVIEW_MAX_FPS = 60  # cap preview playback; skips source frames to compensate
 VIDEO_SEEK_DEBOUNCE_MS = 25  # slider settle time before issuing a cv2 seek
 
+# Waveform settings
+WAVEFORM_BUCKETS = 2000    # horizontal resolution; enough for displays up to 2000px wide
+WAVEFORM_SAMPLE_RATE = 4000  # Hz — low enough to keep RAM reasonable, high enough for accuracy
+
 # Temporary file settings
 TEMP_FILE_PREFIX = "temp__"
 TEMP_LOG_FILES = ["ffmpeg2pass-0.log", "ffmpeg-mbtree.log", "ffmpeg-mbtree.log.mbtree"]

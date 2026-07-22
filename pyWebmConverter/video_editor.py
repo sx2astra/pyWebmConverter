@@ -23,6 +23,7 @@ from .constants import (
     VIDEO_PREVIEW_MAX_FPS,
     VIDEO_SEEK_DEBOUNCE_MS,
 )
+from .waveform import WaveformLoader, WaveformWidget
 
 
 class CropLabel(QLabel):
@@ -82,9 +83,10 @@ class VideoEditorDialog(QDialog):
     Allows users to trim, rotate, and crop video clips.
     """
 
-    def __init__(self, video_path, parent=None, initial_values=None):
+    def __init__(self, video_path, parent=None, initial_values=None, read_only=False):
         super().__init__(parent)
         self.video_path = video_path
+        self._read_only = read_only
         self.cap = cv2.VideoCapture(video_path)
         self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self.fps = self.cap.get(cv2.CAP_PROP_FPS)
@@ -99,6 +101,7 @@ class VideoEditorDialog(QDialog):
         self.crop = None  # (x, y, w, h) in original video pixels
         self._render_w = VIDEO_PREVIEW_WIDTH  # actual rendered pixmap width (updated each frame)
         self._render_h = 0
+        self._waveform_loader = None
 
         self.play_timer = QTimer()
         self.play_timer.timeout.connect(self.play_video)
@@ -114,6 +117,7 @@ class VideoEditorDialog(QDialog):
         self.init_ui()
         if initial_values:
             self._restore_values(initial_values)
+        self._start_waveform_loader()
         self.update_frame()
 
     def init_ui(self):
@@ -144,6 +148,11 @@ class VideoEditorDialog(QDialog):
         timeline_layout.addWidget(self.frame_label)
         layout.addLayout(timeline_layout)
 
+        # Waveform
+        self.waveform_widget = WaveformWidget(self.total_frames)
+        self.waveform_widget.seek_requested.connect(self._on_waveform_seek)
+        layout.addWidget(self.waveform_widget)
+
         # Playback controls
         playback_layout = QHBoxLayout()
         prev_btn = QPushButton("← Frame")
@@ -157,58 +166,64 @@ class VideoEditorDialog(QDialog):
         playback_layout.addWidget(next_btn)
         layout.addLayout(playback_layout)
 
-        # Trim section
-        trim_layout = QHBoxLayout()
-        trim_layout.addWidget(QLabel("Trim Start (frame):"))
-        self.trim_start = QSpinBox()
-        self.trim_start.setMinimum(0)
-        self.trim_start.setMaximum(self.total_frames - 1)
-        self.trim_start.valueChanged.connect(self.on_trim_changed)
-        trim_layout.addWidget(self.trim_start)
-        set_start_btn = QPushButton("Set Start")
-        set_start_btn.clicked.connect(self.set_start_frame)
-        trim_layout.addWidget(set_start_btn)
+        if not self._read_only:
+            # Trim section
+            trim_layout = QHBoxLayout()
+            trim_layout.addWidget(QLabel("Trim Start (frame):"))
+            self.trim_start = QSpinBox()
+            self.trim_start.setMinimum(0)
+            self.trim_start.setMaximum(self.total_frames - 1)
+            self.trim_start.valueChanged.connect(self.on_trim_changed)
+            trim_layout.addWidget(self.trim_start)
+            set_start_btn = QPushButton("Set Start")
+            set_start_btn.clicked.connect(self.set_start_frame)
+            trim_layout.addWidget(set_start_btn)
 
-        trim_layout.addWidget(QLabel("Trim End (frame):"))
-        self.trim_end = QSpinBox()
-        self.trim_end.setMinimum(0)
-        self.trim_end.setMaximum(self.total_frames - 1)
-        self.trim_end.setValue(self.total_frames - 1)
-        self.trim_end.valueChanged.connect(self.on_trim_changed)
-        trim_layout.addWidget(self.trim_end)
-        set_end_btn = QPushButton("Set End")
-        set_end_btn.clicked.connect(self.set_end_frame)
-        trim_layout.addWidget(set_end_btn)
-        layout.addLayout(trim_layout)
+            trim_layout.addWidget(QLabel("Trim End (frame):"))
+            self.trim_end = QSpinBox()
+            self.trim_end.setMinimum(0)
+            self.trim_end.setMaximum(self.total_frames - 1)
+            self.trim_end.setValue(self.total_frames - 1)
+            self.trim_end.valueChanged.connect(self.on_trim_changed)
+            trim_layout.addWidget(self.trim_end)
+            set_end_btn = QPushButton("Set End")
+            set_end_btn.clicked.connect(self.set_end_frame)
+            trim_layout.addWidget(set_end_btn)
+            layout.addLayout(trim_layout)
 
-        # Crop section
-        crop_layout = QHBoxLayout()
-        crop_layout.addWidget(QLabel("Crop:"))
-        self.crop_info_label = QLabel("None — drag on the preview to set a crop region")
-        crop_layout.addWidget(self.crop_info_label)
-        crop_layout.addStretch()
-        clear_crop_btn = QPushButton("Clear Crop")
-        clear_crop_btn.clicked.connect(self.video_label.clear_crop)
-        crop_layout.addWidget(clear_crop_btn)
-        layout.addLayout(crop_layout)
+            # Crop section
+            crop_layout = QHBoxLayout()
+            crop_layout.addWidget(QLabel("Crop:"))
+            self.crop_info_label = QLabel("None — drag on the preview to set a crop region")
+            crop_layout.addWidget(self.crop_info_label)
+            crop_layout.addStretch()
+            clear_crop_btn = QPushButton("Clear Crop")
+            clear_crop_btn.clicked.connect(self.video_label.clear_crop)
+            crop_layout.addWidget(clear_crop_btn)
+            layout.addLayout(crop_layout)
 
-        # Rotation section
-        rotation_layout = QHBoxLayout()
-        rotation_layout.addWidget(QLabel("Rotation:"))
-        self.rotation_combo = QComboBox()
-        self.rotation_combo.addItems(["0°", "90°", "180°", "270°"])
-        self.rotation_combo.currentIndexChanged.connect(self.on_rotation_changed)
-        rotation_layout.addWidget(self.rotation_combo)
-        layout.addLayout(rotation_layout)
+            # Rotation section
+            rotation_layout = QHBoxLayout()
+            rotation_layout.addWidget(QLabel("Rotation:"))
+            self.rotation_combo = QComboBox()
+            self.rotation_combo.addItems(["0°", "90°", "180°", "270°"])
+            self.rotation_combo.currentIndexChanged.connect(self.on_rotation_changed)
+            rotation_layout.addWidget(self.rotation_combo)
+            layout.addLayout(rotation_layout)
 
         # Buttons
         button_layout = QHBoxLayout()
-        apply_btn = QPushButton("Apply & Close")
-        apply_btn.clicked.connect(self.apply_and_close)
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.clicked.connect(self.reject)
-        button_layout.addWidget(apply_btn)
-        button_layout.addWidget(cancel_btn)
+        if self._read_only:
+            close_btn = QPushButton("Close")
+            close_btn.clicked.connect(self.accept)
+            button_layout.addWidget(close_btn)
+        else:
+            apply_btn = QPushButton("Apply & Close")
+            apply_btn.clicked.connect(self.apply_and_close)
+            cancel_btn = QPushButton("Cancel")
+            cancel_btn.clicked.connect(self.reject)
+            button_layout.addWidget(apply_btn)
+            button_layout.addWidget(cancel_btn)
         layout.addLayout(button_layout)
 
         self.setLayout(layout)
@@ -246,6 +261,7 @@ class VideoEditorDialog(QDialog):
             self.timeline.setValue(self.current_frame)
             self.timeline.blockSignals(False)
             self.frame_label.setText(f"{self.current_frame}/{self.total_frames}")
+            self.waveform_widget.set_position(self.current_frame)
 
     def on_crop_changed(self, rect):
         """Convert display-coordinate crop rect to original video coordinates."""
@@ -291,6 +307,7 @@ class VideoEditorDialog(QDialog):
         self.play_timer.stop()
         self._pending_frame = position
         self.frame_label.setText(f"{position}/{self.total_frames}")
+        self.waveform_widget.set_position(position)
         self._seek_timer.start(VIDEO_SEEK_DEBOUNCE_MS)
 
     def _seek_to_pending(self):
@@ -328,6 +345,7 @@ class VideoEditorDialog(QDialog):
         """Handle trim spinbox changes."""
         self.start_frame = self.trim_start.value()
         self.end_frame = self.trim_end.value()
+        self.waveform_widget.set_trim(self.start_frame, self.end_frame)
 
     def prev_frame(self):
         """Step back one frame and pause."""
@@ -371,6 +389,23 @@ class VideoEditorDialog(QDialog):
         """Handle rotation changes."""
         self.rotation = index * 90
         self.update_frame()
+
+    def _start_waveform_loader(self):
+        """Begin async audio extraction for the waveform display."""
+        self._waveform_loader = WaveformLoader(self.video_path)
+        self._waveform_loader.waveform_ready.connect(self.waveform_widget.set_waveform)
+        self._waveform_loader.start()
+
+    def _on_waveform_seek(self, frame: int):
+        """Handle a seek initiated by clicking or dragging on the waveform."""
+        self.is_playing = False
+        self.play_btn.setText("Play")
+        self.play_timer.stop()
+        self._pending_frame = frame
+        self.frame_label.setText(f"{frame}/{self.total_frames}")
+        self.timeline.setValue(frame)
+        self.waveform_widget.set_position(frame)
+        self._seek_timer.start(VIDEO_SEEK_DEBOUNCE_MS)
 
     def _restore_values(self, values: dict):
         """Restore trim, rotation, and crop from a previous session."""
@@ -418,6 +453,9 @@ class VideoEditorDialog(QDialog):
         }
 
     def closeEvent(self, event):
-        """Clean up timer on close."""
+        """Clean up timers and background loader on close."""
         self.play_timer.stop()
+        if self._waveform_loader and self._waveform_loader.isRunning():
+            self._waveform_loader.quit()
+            self._waveform_loader.wait()
         event.accept()

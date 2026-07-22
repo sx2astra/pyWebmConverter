@@ -32,6 +32,7 @@ from PyQt5.QtCore import QSettings
 from .video_editor import VideoEditorDialog
 from .ffmpeg_worker import FFmpegWorker
 from .audio_processor import adjust_audio_bitrate
+from .notifier import notify_complete
 from .command_builder import (
     select_codec_and_factors,
     get_auto_scale_factor,
@@ -265,10 +266,16 @@ class FFmpegGUI(QWidget):
         self.progress_bar.setVisible(False)
         layout.addWidget(self.progress_bar)
 
+        post_layout = QHBoxLayout()
+        self.preview_btn = QPushButton("Preview Result")
+        self.preview_btn.clicked.connect(self.preview_output)
+        self.preview_btn.setVisible(False)
+        post_layout.addWidget(self.preview_btn)
         self.open_folder_btn = QPushButton("Open Output Folder")
         self.open_folder_btn.clicked.connect(self.open_output_folder)
         self.open_folder_btn.setVisible(False)
-        layout.addWidget(self.open_folder_btn)
+        post_layout.addWidget(self.open_folder_btn)
+        layout.addLayout(post_layout)
 
         # Output log section
         self.log = QTextEdit()
@@ -502,6 +509,7 @@ class FFmpegGUI(QWidget):
 
         # Start conversion
         self._save_settings()
+        self.preview_btn.setVisible(False)
         self.open_folder_btn.setVisible(False)
         self.progress_bar.setValue(0)
         self.progress_bar.setVisible(True)
@@ -550,7 +558,9 @@ class FFmpegGUI(QWidget):
                 f"Output: {final_size_mb:.2f} MB / {self.current_target_size_mb:.1f} MB"
                 f" target ({pct:.1f}%)</span>"
             )
+            self.preview_btn.setVisible(True)
             self.open_folder_btn.setVisible(True)
+            notify_complete(final_size_mb, self.current_target_size_mb)
 
             # Clean up temporary ffmpeg files
             for temp_file in TEMP_LOG_FILES:
@@ -597,6 +607,12 @@ class FFmpegGUI(QWidget):
         s.setValue("scale_index", self.scale_combo.currentIndex())
         s.setValue("use_2pass", self.twopass_checkbox.isChecked())
         s.setValue("allow_av1", self.av1_checkbox.isChecked())
+
+    def preview_output(self):
+        """Open the encoded output in a read-only video preview dialog."""
+        dialog = VideoEditorDialog(self.current_output_file, self, read_only=True)
+        dialog.exec_()
+        dialog.cap.release()
 
     def cancel_conversion(self):
         """Cancel the running ffmpeg process."""
