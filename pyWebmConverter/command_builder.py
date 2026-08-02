@@ -6,6 +6,7 @@ Handles command construction for both VP9 and AV1 codecs with 1-pass and 2-pass 
 from .constants import (
     CODEC_VP9,
     CODEC_AV1,
+    CODEC_H264,
     AV1_BITRATE_THRESHOLD,
     VP9_ULTRA_LOW_THRESHOLD,
     VP9_VERY_LOW_THRESHOLD,
@@ -42,7 +43,12 @@ from .constants import (
     VP9_ENABLE_TPL,
     AV1_TILE_ROWS,
     OUTPUT_FORMAT,
+    OUTPUT_FORMAT_MP4,
     ROTATION_ANGLES,
+    H264_PRESET_2PASS,
+    H264_PRESET_1PASS,
+    H264_PROFILE,
+    H264_LEVEL,
 )
 
 
@@ -304,4 +310,81 @@ def build_encoding_commands(
 
     # Single pass: Add audio, metadata, and output
     cmd = base_cmd + audio_params + metadata + f'-f {OUTPUT_FORMAT} "{output_file}"'
+    return cmd, None
+
+
+def build_h264_quality_params(use_2pass: bool) -> str:
+    """
+    Build H.264-specific quality parameters.
+
+    Args:
+        use_2pass: Whether 2-pass encoding is used (selects slower preset for better quality)
+
+    Returns:
+        Quality parameters string
+    """
+    preset = H264_PRESET_2PASS if use_2pass else H264_PRESET_1PASS
+    return (
+        f"-preset {preset} "
+        f"-profile:v {H264_PROFILE} "
+        f"-level:v {H264_LEVEL} "
+        f"-movflags +faststart"
+    )
+
+
+def build_h264_encoding_commands(
+    input_video: str,
+    output_file: str,
+    video_bitrate: int,
+    audio_enabled: bool,
+    audio_bitrate: int,
+    filters: str,
+    use_2pass: bool,
+    trim_prefix: str = "",
+    title: str = "",
+) -> tuple:
+    """
+    Build complete ffmpeg encoding commands for H.264/AAC MP4 output.
+
+    Args:
+        input_video: Path to input video
+        output_file: Path to output file
+        video_bitrate: Target video bitrate in bps
+        audio_enabled: Whether to include audio
+        audio_bitrate: Audio bitrate in bps
+        filters: Video filter chain
+        use_2pass: Whether to use 2-pass encoding
+        trim_prefix: Optional trim parameters
+        title: Optional metadata title
+
+    Returns:
+        Tuple of (command_pass1, command_pass2 or None)
+    """
+    maxrate = int(video_bitrate * MAXRATE_FACTOR_VP9)
+    quality_params = build_h264_quality_params(use_2pass)
+
+    base_cmd = (
+        f"ffmpeg.exe -threads {NUM_THREADS} {trim_prefix}"
+        f'-i "{input_video}" '
+        f"-c:v {CODEC_H264} "
+        f"-pix_fmt yuv420p "
+        f"-b:v {video_bitrate} "
+        f"-maxrate {maxrate} "
+        f"-bufsize {maxrate * VBV_BUFSIZE_MULTIPLIER} "
+        f"{quality_params} "
+        f"-vf {filters} "
+    )
+
+    audio_params = f"-c:a aac -b:a {audio_bitrate} " if audio_enabled else "-an "
+    metadata = f'-metadata title="{title}" ' if title else ""
+
+    if use_2pass:
+        cmd_pass1 = base_cmd + "-pass 1 -an -f null nul"
+        cmd_pass2 = (
+            base_cmd + f"-pass 2 {audio_params}{metadata}"
+            + f'-f {OUTPUT_FORMAT_MP4} "{output_file}"'
+        )
+        return cmd_pass1, cmd_pass2
+
+    cmd = base_cmd + audio_params + metadata + f'-f {OUTPUT_FORMAT_MP4} "{output_file}"'
     return cmd, None

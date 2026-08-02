@@ -8,6 +8,7 @@ from pyWebmConverter.command_builder import (
     get_auto_scale_factor,
     build_video_filters,
     build_encoding_commands,
+    build_h264_encoding_commands,
 )
 from pyWebmConverter.constants import (
     CODEC_VP9,
@@ -159,6 +160,75 @@ def test_build_command_metadata_title():
         title="myvideo",
     )
     assert 'title="myvideo"' in cmd
+
+
+# --- build_h264_encoding_commands ---
+
+def test_h264_1pass_uses_libx264():
+    cmd, _ = build_h264_encoding_commands(
+        "in.mp4", "out.mp4", 500_000, False, 0,
+        "scale=iw*1.0:ih*1.0", use_2pass=False,
+    )
+    assert "libx264" in cmd
+
+
+def test_h264_1pass_no_pass2():
+    _, cmd2 = build_h264_encoding_commands(
+        "in.mp4", "out.mp4", 500_000, False, 0,
+        "scale=iw*1.0:ih*1.0", use_2pass=False,
+    )
+    assert cmd2 is None
+
+
+def test_h264_2pass_returns_both():
+    cmd1, cmd2 = build_h264_encoding_commands(
+        "in.mp4", "out.mp4", 500_000, False, 0,
+        "scale=iw*1.0:ih*1.0", use_2pass=True,
+    )
+    assert "-pass 1" in cmd1
+    assert "-pass 2" in cmd2
+
+
+def test_h264_pass1_uses_null_muxer():
+    cmd1, _ = build_h264_encoding_commands(
+        "in.mp4", "out.mp4", 500_000, False, 0,
+        "scale=iw*1.0:ih*1.0", use_2pass=True,
+    )
+    assert "-f null" in cmd1
+
+
+def test_h264_output_uses_mp4_format():
+    _, cmd2 = build_h264_encoding_commands(
+        "in.mp4", "out.mp4", 500_000, False, 0,
+        "scale=iw*1.0:ih*1.0", use_2pass=True,
+    )
+    assert "-f mp4" in cmd2
+
+
+def test_h264_audio_uses_aac():
+    cmd, _ = build_h264_encoding_commands(
+        "in.mp4", "out.mp4", 500_000, True, 128_000,
+        "scale=iw*1.0:ih*1.0", use_2pass=False,
+    )
+    assert "aac" in cmd
+    assert "libopus" not in cmd
+
+
+def test_h264_yuv420p_not_10bit():
+    cmd, _ = build_h264_encoding_commands(
+        "in.mp4", "out.mp4", 500_000, False, 0,
+        "scale=iw*1.0:ih*1.0", use_2pass=False,
+    )
+    assert "yuv420p" in cmd
+    assert "yuv420p10" not in cmd
+
+
+def test_h264_movflags_faststart():
+    cmd, _ = build_h264_encoding_commands(
+        "in.mp4", "out.mp4", 500_000, False, 0,
+        "scale=iw*1.0:ih*1.0", use_2pass=False,
+    )
+    assert "faststart" in cmd
 
 
 # --- safety margin ordering ---

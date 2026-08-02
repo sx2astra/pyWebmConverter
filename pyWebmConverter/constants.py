@@ -6,6 +6,7 @@ Centralized definitions for magic numbers, thresholds, and parameter values.
 # Video codec configuration
 CODEC_VP9 = "libvpx-vp9"
 CODEC_AV1 = "libaom-av1"
+CODEC_H264 = "libx264"
 
 # Bitrate thresholds (in bits per second)
 AV1_BITRATE_THRESHOLD = 800000  # Use AV1 only for >= 800 kbps
@@ -31,6 +32,7 @@ SCALE_FACTOR_NATIVE = 1.0  # No scaling
 
 # Audio configuration
 AUDIO_CODEC = "libopus"
+AUDIO_CODEC_AAC = "aac"
 AUDIO_INITIAL_BITRATE = 96  # kbps — binary search starting midpoint
 AUDIO_DEFAULT_BITRATE = (
     96000  # bps budgeted for audio during video encode (matches above)
@@ -90,7 +92,14 @@ ROTATION_ANGLES = {
     270: "transpose=2",
 }
 
+# H.264 / MP4 encoding settings
+H264_PRESET_2PASS = "slow"
+H264_PRESET_1PASS = "medium"
+H264_PROFILE = "high"
+H264_LEVEL = "4.1"
+
 # UI defaults
+DEFAULT_OUTPUT_FORMAT_OPTIONS = ["WebM (VP9/AV1)", "MP4 (Twitter/X)"]
 DEFAULT_FILE_SIZE_MB = 3.0
 DEFAULT_AUDIO = "on"
 DEFAULT_AUDIO_OPTIONS = ["on", "off"]
@@ -133,7 +142,9 @@ TEMP_LOG_FILES = ["ffmpeg2pass-0.log", "ffmpeg-mbtree.log", "ffmpeg-mbtree.log.m
 
 # Format settings
 OUTPUT_FORMAT = "webm"
+OUTPUT_FORMAT_MP4 = "mp4"
 EXTRACTED_AUDIO_FILENAME = "extracted_audio.opus"
+EXTRACTED_AUDIO_FILENAME_AAC = "extracted_audio.aac"
 
 # Error messages
 ERROR_NO_INPUT = "Error: Please select an input video file first."

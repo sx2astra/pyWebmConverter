@@ -38,17 +38,20 @@ from .command_builder import (
     get_auto_scale_factor,
     build_video_filters,
     build_encoding_commands,
+    build_h264_encoding_commands,
 )
 from .constants import (
     DEFAULT_FILE_SIZE_MB,
     DEFAULT_AUDIO_OPTIONS,
     DEFAULT_SCALE_OPTIONS,
     DEFAULT_FPS_OPTIONS,
+    DEFAULT_OUTPUT_FORMAT_OPTIONS,
     DEFAULT_2PASS,
     DEFAULT_AV1,
     AUTO_SIZE_MB_PER_SECOND,
     AUTO_SIZE_MIN_MB,
     AUTO_SIZE_MAX_MB,
+    AUDIO_CODEC_AAC,
     TEMP_LOG_FILES,
     ERROR_NO_INPUT,
     ERROR_REQUIRED_FIELDS,
@@ -163,6 +166,7 @@ class FFmpegGUI(QWidget):
         # Conversion state — populated in start_conversion, read in on_conversion_finished
         self.current_output_file = None
         self.current_audio = None
+        self.current_audio_codec = None
         self.current_target_size_mb = None
         self.current_trim_prefix = None
         self.current_input_video = None
@@ -256,6 +260,16 @@ class FFmpegGUI(QWidget):
         self.audio_combo.addItems(DEFAULT_AUDIO_OPTIONS)
         layout.addWidget(self.audio_label)
         layout.addWidget(self.audio_combo)
+
+        # Output format
+        format_layout = QHBoxLayout()
+        format_layout.addWidget(QLabel("Output Format:"))
+        self.format_combo = QComboBox()
+        self.format_combo.addItems(DEFAULT_OUTPUT_FORMAT_OPTIONS)
+        self.format_combo.currentIndexChanged.connect(self._on_format_changed)
+        format_layout.addWidget(self.format_combo)
+        format_layout.addStretch()
+        layout.addLayout(format_layout)
 
         # AV1 codec support checkbox
         self.av1_checkbox = QCheckBox("Allow AV1 codec (for systems that support it)")
@@ -357,7 +371,7 @@ class FFmpegGUI(QWidget):
         out_dir = self.out_path.text().strip()
         file_name = self.file_name.text().strip()
         if file_name and not os.path.splitext(file_name)[1]:
-            file_name += ".webm"
+            file_name += ".mp4" if self.format_combo.currentIndex() == 1 else ".webm"
         self.file_name.setText(file_name)
         scale = self.scale_combo.currentText()
         audio = self.audio_combo.currentText()
@@ -452,12 +466,16 @@ class FFmpegGUI(QWidget):
             audio_bitrate = 0
             video_bitrate = total_bitrate
 
-        # Auto-select codec based on bitrate
-        allow_av1 = self.av1_checkbox.isChecked()
         use_2pass = self.twopass_checkbox.isChecked()
-        codec, cpu_used_2pass, cpu_used_1pass, tile_columns, maxrate_factor = (
-            select_codec_and_factors(video_bitrate, allow_av1)
-        )
+        is_mp4 = self.format_combo.currentIndex() == 1
+
+        # Codec selection (WebM only — MP4 always uses H.264)
+        codec = cpu_used_2pass = cpu_used_1pass = tile_columns = maxrate_factor = None
+        if not is_mp4:
+            allow_av1 = self.av1_checkbox.isChecked()
+            codec, cpu_used_2pass, cpu_used_1pass, tile_columns, maxrate_factor = (
+                select_codec_and_factors(video_bitrate, allow_av1)
+            )
 
         # Parse scale and intelligently adjust
         res_target_height = (
@@ -502,36 +520,38 @@ class FFmpegGUI(QWidget):
         # Build ffmpeg commands
         output_file = f"{out_dir}/{file_name}"
         title = os.path.splitext(file_name)[0]
-        cmd, cmd_pass2 = build_encoding_commands(
-            input_video,
-            output_file,
-            video_bitrate,
-            audio == "on",
-            audio_bitrate,
-            codec,
-            cpu_used_2pass,
-            cpu_used_1pass,
-            tile_columns,
-            maxrate_factor,
-            filters,
-            use_2pass,
-            trim_prefix,
-            title,
-        )
 
-        encoding_mode = "2-Pass" if use_2pass else "1-Pass"
-        maxrate_pct = int(maxrate_factor * 100)
-        base_info = (
-            f"<span style='color:blue'>Using {codec} ({encoding_mode}) | "
-            f"Bitrate: {video_bitrate}bps | Maxrate cap: {maxrate_pct}% | "
-            f"Target: {file_size_mb}MB"
-        )
-        if override_size_mb is not None:
+        if is_mp4:
+            cmd, cmd_pass2 = build_h264_encoding_commands(
+                input_video, output_file, video_bitrate,
+                audio == "on", audio_bitrate,
+                filters, use_2pass, trim_prefix, title,
+            )
+            encoding_mode = "2-Pass" if use_2pass else "1-Pass"
             self.log.append(
-                base_info + f" | Bitrate calc from: {override_size_mb}MB</span>"
+                f"<span style='color:blue'>Using H.264/AAC ({encoding_mode}) | "
+                f"Bitrate: {video_bitrate}bps | Target: {file_size_mb}MB</span>"
             )
         else:
-            self.log.append(base_info + "</span>")
+            cmd, cmd_pass2 = build_encoding_commands(
+                input_video, output_file, video_bitrate,
+                audio == "on", audio_bitrate,
+                codec, cpu_used_2pass, cpu_used_1pass, tile_columns, maxrate_factor,
+                filters, use_2pass, trim_prefix, title,
+            )
+            encoding_mode = "2-Pass" if use_2pass else "1-Pass"
+            maxrate_pct = int(maxrate_factor * 100)
+            base_info = (
+                f"<span style='color:blue'>Using {codec} ({encoding_mode}) | "
+                f"Bitrate: {video_bitrate}bps | Maxrate cap: {maxrate_pct}% | "
+                f"Target: {file_size_mb}MB"
+            )
+            if override_size_mb is not None:
+                self.log.append(
+                    base_info + f" | Bitrate calc from: {override_size_mb}MB</span>"
+                )
+            else:
+                self.log.append(base_info + "</span>")
         self.log.append(
             "<span style='color:blue'>"
             "Quality Focus: 10-bit encoding with detailed parameters.</span>"
@@ -543,6 +563,7 @@ class FFmpegGUI(QWidget):
         # Store for later use in on_conversion_finished
         self.current_output_file = output_file
         self.current_audio = audio
+        self.current_audio_codec = AUDIO_CODEC_AAC if is_mp4 else "libopus"
         self.current_target_size_mb = file_size_mb
         self.current_trim_prefix = trim_prefix
         self.current_input_video = input_video
@@ -576,12 +597,14 @@ class FFmpegGUI(QWidget):
             if hasattr(self, "current_audio") and self.current_audio == "on":
                 self.log.append(INFO_AUDIO_ADJUSTMENT_START)
                 trim_prefix = getattr(self, "current_trim_prefix", "")
+                audio_codec = getattr(self, "current_audio_codec", "libopus")
                 final_audio_bitrate = adjust_audio_bitrate(
                     self.current_input_video,
                     self.current_output_file,
                     self.current_target_size_mb,
                     self.log.append,
                     trim_prefix,
+                    audio_codec,
                 )
                 self.log.append(
                     INFO_AUDIO_ADJUSTMENT_COMPLETE.format(final_audio_bitrate)
@@ -636,6 +659,7 @@ class FFmpegGUI(QWidget):
         self.audio_combo.setCurrentIndex(int(s.value("audio_index", 0)))
         self.scale_combo.setCurrentIndex(int(s.value("scale_index", 0)))
         self.fps_combo.setCurrentIndex(int(s.value("fps_index", 0)))
+        self.format_combo.setCurrentIndex(int(s.value("format_index", 0)))
         self.twopass_checkbox.setChecked(s.value("use_2pass", DEFAULT_2PASS, type=bool))
         self.av1_checkbox.setChecked(s.value("allow_av1", DEFAULT_AV1, type=bool))
         self.auto_size_checkbox.setChecked(s.value("auto_size", False, type=bool))
@@ -648,9 +672,17 @@ class FFmpegGUI(QWidget):
         s.setValue("audio_index", self.audio_combo.currentIndex())
         s.setValue("scale_index", self.scale_combo.currentIndex())
         s.setValue("fps_index", self.fps_combo.currentIndex())
+        s.setValue("format_index", self.format_combo.currentIndex())
         s.setValue("use_2pass", self.twopass_checkbox.isChecked())
         s.setValue("allow_av1", self.av1_checkbox.isChecked())
         s.setValue("auto_size", self.auto_size_checkbox.isChecked())
+
+    def _on_format_changed(self, index: int):
+        """Disable AV1 option when MP4 output is selected (H.264 only)."""
+        is_mp4 = index == 1
+        self.av1_checkbox.setEnabled(not is_mp4)
+        if is_mp4:
+            self.av1_checkbox.setChecked(False)
 
     def _on_auto_size_toggled(self, checked: bool):
         """Enable or disable the file size text field based on the Auto checkbox."""
