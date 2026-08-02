@@ -43,8 +43,12 @@ from .constants import (
     DEFAULT_FILE_SIZE_MB,
     DEFAULT_AUDIO_OPTIONS,
     DEFAULT_SCALE_OPTIONS,
+    DEFAULT_FPS_OPTIONS,
     DEFAULT_2PASS,
     DEFAULT_AV1,
+    AUTO_SIZE_MB_PER_SECOND,
+    AUTO_SIZE_MIN_MB,
+    AUTO_SIZE_MAX_MB,
     TEMP_LOG_FILES,
     ERROR_NO_INPUT,
     ERROR_REQUIRED_FIELDS,
@@ -211,14 +215,28 @@ class FFmpegGUI(QWidget):
         layout.addWidget(self.scale_label)
         layout.addWidget(self.scale_combo)
 
+        # Frame rate section
+        fps_label_layout = QHBoxLayout()
+        fps_label_layout.addWidget(QLabel("Output Frame Rate:"))
+        self.fps_combo = QComboBox()
+        self.fps_combo.addItems(DEFAULT_FPS_OPTIONS)
+        fps_label_layout.addWidget(self.fps_combo)
+        fps_label_layout.addStretch()
+        layout.addLayout(fps_label_layout)
+
         # Target File Size section
-        self.file_size_label = QLabel("Target File Size (MB):")
+        file_size_header = QHBoxLayout()
+        file_size_header.addWidget(QLabel("Target File Size (MB):"))
+        file_size_header.addStretch()
+        self.auto_size_checkbox = QCheckBox("Auto")
+        self.auto_size_checkbox.toggled.connect(self._on_auto_size_toggled)
+        file_size_header.addWidget(self.auto_size_checkbox)
+        layout.addLayout(file_size_header)
         self.file_size_input = QLineEdit()
         self.file_size_input.setPlaceholderText(
             "Enter target size (e.g., 3.0 for ~4MB, 8.0 for ~10MB)"
         )
         self.file_size_input.setText(str(DEFAULT_FILE_SIZE_MB))
-        layout.addWidget(self.file_size_label)
         layout.addWidget(self.file_size_input)
 
         # Override target size for bitrate calculation (optional)
@@ -349,17 +367,21 @@ class FFmpegGUI(QWidget):
             self.log.append(f"<span style='color:red'>{ERROR_REQUIRED_FIELDS}</span>")
             return
 
-        # Get and validate target file size
-        try:
-            file_size_mb = float(self.file_size_input.text().strip())
-            if file_size_mb <= 0:
+        # Validate manual file size up-front (auto mode skips this)
+        manual_file_size_mb = None
+        if not self.auto_size_checkbox.isChecked():
+            try:
+                manual_file_size_mb = float(self.file_size_input.text().strip())
+                if manual_file_size_mb <= 0:
+                    self.log.append(
+                        f"<span style='color:red'>{ERROR_FILESIZE_NEGATIVE}</span>"
+                    )
+                    return
+            except ValueError:
                 self.log.append(
-                    f"<span style='color:red'>{ERROR_FILESIZE_NEGATIVE}</span>"
+                    f"<span style='color:red'>{ERROR_INVALID_FILESIZE}</span>"
                 )
                 return
-        except ValueError:
-            self.log.append(f"<span style='color:red'>{ERROR_INVALID_FILESIZE}</span>")
-            return
 
         # Get and validate override target size (optional)
         override_size_mb = None
@@ -393,6 +415,19 @@ class FFmpegGUI(QWidget):
         else:
             duration_s = full_duration_s
             trim_prefix = ""
+
+        # Resolve file size — auto-compute from clip duration if requested
+        if self.auto_size_checkbox.isChecked():
+            file_size_mb = max(
+                AUTO_SIZE_MIN_MB,
+                min(AUTO_SIZE_MAX_MB, duration_s * AUTO_SIZE_MB_PER_SECOND),
+            )
+            self.log.append(
+                f"<span style='color:blue'>Auto target size: {file_size_mb:.2f} MB"
+                f" ({duration_s:.1f}s × {AUTO_SIZE_MB_PER_SECOND} MB/s)</span>"
+            )
+        else:
+            file_size_mb = manual_file_size_mb
 
         # Calculate bitrate from target file size.
         # Safety margin reserves headroom for WebM container overhead and VP9/AV1
@@ -451,12 +486,17 @@ class FFmpegGUI(QWidget):
             # Percentage-based scaling (2x, 0.75x, etc.)
             factor = float(scale[:-1])
 
+        # Resolve output frame rate
+        fps_text = self.fps_combo.currentText()
+        output_fps = None if fps_text == "Auto" else int(fps_text)
+
         # Build video filters
         filters = build_video_filters(
             factor,
             self.editor_values["rotation"],
             target_height=res_target_height,
             crop=self.editor_values["crop"],
+            fps=output_fps,
         )
 
         # Build ffmpeg commands
@@ -595,8 +635,10 @@ class FFmpegGUI(QWidget):
         self.file_size_input.setText(s.value("file_size", str(DEFAULT_FILE_SIZE_MB)))
         self.audio_combo.setCurrentIndex(int(s.value("audio_index", 0)))
         self.scale_combo.setCurrentIndex(int(s.value("scale_index", 0)))
+        self.fps_combo.setCurrentIndex(int(s.value("fps_index", 0)))
         self.twopass_checkbox.setChecked(s.value("use_2pass", DEFAULT_2PASS, type=bool))
         self.av1_checkbox.setChecked(s.value("allow_av1", DEFAULT_AV1, type=bool))
+        self.auto_size_checkbox.setChecked(s.value("auto_size", False, type=bool))
 
     def _save_settings(self):
         """Persist current settings for the next session."""
@@ -605,8 +647,22 @@ class FFmpegGUI(QWidget):
         s.setValue("file_size", self.file_size_input.text().strip())
         s.setValue("audio_index", self.audio_combo.currentIndex())
         s.setValue("scale_index", self.scale_combo.currentIndex())
+        s.setValue("fps_index", self.fps_combo.currentIndex())
         s.setValue("use_2pass", self.twopass_checkbox.isChecked())
         s.setValue("allow_av1", self.av1_checkbox.isChecked())
+        s.setValue("auto_size", self.auto_size_checkbox.isChecked())
+
+    def _on_auto_size_toggled(self, checked: bool):
+        """Enable or disable the file size text field based on the Auto checkbox."""
+        self.file_size_input.setEnabled(not checked)
+        if checked:
+            self.file_size_input.setPlaceholderText("computed from clip duration")
+            self.file_size_input.clear()
+        else:
+            self.file_size_input.setPlaceholderText(
+                "Enter target size (e.g., 3.0 for ~4MB, 8.0 for ~10MB)"
+            )
+            self.file_size_input.setText(str(DEFAULT_FILE_SIZE_MB))
 
     def preview_output(self):
         """Open the encoded output in a read-only video preview dialog."""

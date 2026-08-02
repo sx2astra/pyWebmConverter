@@ -2,8 +2,7 @@
 Unit tests for pyWebmConverter core functions.
 Tests the command builder, constants, and utility functions.
 """
-
-import pytest
+# pylint: disable=missing-function-docstring
 from pyWebmConverter.command_builder import (
     select_codec_and_factors,
     get_auto_scale_factor,
@@ -93,6 +92,24 @@ def test_filters_target_height():
     result = build_video_filters(1.0, target_height=720)
     assert "scale=-2:720" in result
     assert "iw*" not in result
+
+
+def test_filters_fps_appended():
+    result = build_video_filters(1.0, fps=30)
+    assert result.endswith("fps=30")
+
+
+def test_filters_fps_none_omitted():
+    result = build_video_filters(1.0, fps=None)
+    assert "fps" not in result
+
+
+def test_filters_fps_after_scale():
+    result = build_video_filters(0.5, fps=24)
+    parts = result.split(",")
+    scale_idx = next(i for i, p in enumerate(parts) if "scale" in p)
+    fps_idx = next(i for i, p in enumerate(parts) if "fps" in p)
+    assert fps_idx > scale_idx
 
 
 # --- build_encoding_commands ---

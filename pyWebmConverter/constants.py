@@ -107,8 +107,14 @@ DEFAULT_SCALE_OPTIONS = [
     "0.5x",
     "0.25x",
 ]
+DEFAULT_FPS_OPTIONS = ["Auto", "15", "24", "30", "60"]
 DEFAULT_2PASS = True
 DEFAULT_AV1 = False
+
+# Auto file-size heuristic: target this many MB per second of clip duration
+AUTO_SIZE_MB_PER_SECOND = 0.4   # ~4 MB per 10 s — comfortable Reddit/4chan quality
+AUTO_SIZE_MIN_MB = 0.5
+AUTO_SIZE_MAX_MB = 50.0
 
 # Video editor settings
 VIDEO_EDITOR_WIDTH = 900

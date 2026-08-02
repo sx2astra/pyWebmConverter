@@ -99,15 +99,17 @@ def build_video_filters(
     rotation: int = 0,
     target_height: int = None,
     crop: tuple = None,
+    fps: int = None,
 ) -> str:
     """
-    Build the video filter chain for crop, rotation, and scaling.
+    Build the video filter chain for crop, rotation, scaling, and frame rate.
 
     Args:
         scale_factor: Scale multiplier (ignored when target_height is set)
         rotation: Rotation angle (0, 90, 180, 270)
         target_height: Pin output to this exact height; FFmpeg computes an even-valued width
         crop: (x, y, w, h) in original video pixels; applied before rotation/scale
+        fps: Output frame rate cap; None keeps the source rate
 
     Returns:
         Comma-separated filter string
@@ -130,6 +132,9 @@ def build_video_filters(
     else:
         scale_filter = f"scale=iw*{scale_factor}:ih*{scale_factor}"
     filters.append(scale_filter)
+
+    if fps is not None:
+        filters.append(f"fps={fps}")
 
     return ",".join(filters)
 
