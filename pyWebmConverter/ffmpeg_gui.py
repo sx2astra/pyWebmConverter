@@ -356,7 +356,7 @@ class FFmpegGUI(QWidget):
         input_video = self.input_path.text().strip()
         out_dir = self.out_path.text().strip()
         file_name = self.file_name.text().strip()
-        if file_name and not file_name.endswith(".webm"):
+        if file_name and not os.path.splitext(file_name)[1]:
             file_name += ".webm"
         self.file_name.setText(file_name)
         scale = self.scale_combo.currentText()
