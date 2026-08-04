@@ -52,6 +52,20 @@ def test_auto_scale_native_high_bitrate():
     assert "1.0x" in desc
 
 
+def test_auto_scale_4k_source_downscales_to_720p():
+    # 10 MB / 45 s → ~1.73 Mbps video bitrate: fine for 720p, terrible for 4K
+    factor, desc = get_auto_scale_factor(10.0, 1_730_000, source_height=2160)
+    assert factor < 1.0
+    assert "720" in desc
+
+
+def test_auto_scale_source_already_small_stays_native():
+    # 720p source at 1.73 Mbps should not downscale further
+    factor, desc = get_auto_scale_factor(10.0, 1_730_000, source_height=720)
+    assert factor == 1.0
+    assert "1.0x" in desc
+
+
 def test_auto_scale_returns_float():
     factor, desc = get_auto_scale_factor(3.0, 400_000)
     assert isinstance(factor, float)

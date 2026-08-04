@@ -482,7 +482,13 @@ class FFmpegGUI(QWidget):
             None  # set for resolution-based scaling ("480p", "720p", "1080p")
         )
         if scale == "Auto":
-            factor, scale_desc = get_auto_scale_factor(file_size_mb, video_bitrate)
+            _, src_h = get_video_dimensions(input_video)
+            factor, scale_desc = get_auto_scale_factor(
+                file_size_mb, video_bitrate, src_h or 0
+            )
+            if src_h and factor < 1.0:
+                res_target_height = round(src_h * factor)
+                factor = 1.0  # unused — res_target_height takes over
             self.log.append(
                 f"<span style='color:blue'>Auto-scaling: {scale_desc}</span>"
             )

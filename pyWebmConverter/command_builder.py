@@ -69,19 +69,44 @@ def select_codec_and_factors(video_bitrate: int, allow_av1: bool) -> tuple:
     return CODEC_VP9, CPU_USED_2PASS, CPU_USED_1PASS, 1, MAXRATE_FACTOR_VP9
 
 
-def get_auto_scale_factor(file_size_mb: float, video_bitrate: int) -> tuple[float, str]:
+def get_auto_scale_factor(
+    file_size_mb: float, video_bitrate: int, source_height: int = 0
+) -> tuple[float, str]:
     """
-    Calculate auto-scaling factor and message based on file size and bitrate.
+    Calculate auto-scaling factor and message based on file size, bitrate, and source height.
 
     Args:
         file_size_mb: Target file size in MB
         video_bitrate: Video bitrate in bits per second
+        source_height: Source video height in pixels (0 = unknown, falls back to bitrate-only logic)
 
     Returns:
         Tuple of (scale_factor, description_message)
     """
     if file_size_mb < FILESIZE_TINY:
         return SCALE_FACTOR_TINY, "0.2x (tiny file, critical compression)"
+
+    if source_height:
+        # Map bitrate budget to the highest output height that will encode well
+        if video_bitrate >= 6_000_000:
+            target_h = 0          # 6+ Mbps: native is fine
+        elif video_bitrate >= 2_500_000:
+            target_h = 1080       # 2.5–6 Mbps → 1080p cap
+        elif video_bitrate >= 800_000:
+            target_h = 720        # 0.8–2.5 Mbps → 720p cap
+        elif video_bitrate >= 400_000:
+            target_h = 480        # 0.4–0.8 Mbps → 480p cap
+        elif video_bitrate >= 150_000:
+            target_h = 360        # 0.15–0.4 Mbps → 360p cap
+        else:
+            target_h = 240        # < 0.15 Mbps → 240p cap
+
+        if target_h and source_height > target_h:
+            factor = round(target_h / source_height, 4)
+            return factor, f"{factor:.2f}x → {target_h}p ({video_bitrate // 1000} kbps budget)"
+        return SCALE_FACTOR_NATIVE, "1.0x (source resolution fits bitrate budget)"
+
+    # Fallback when source dimensions are unknown — use bitrate + file size thresholds
     if video_bitrate < VP9_ULTRA_LOW_THRESHOLD:
         return SCALE_FACTOR_EXTREME, "0.25x (extremely low bitrate)"
     if (
