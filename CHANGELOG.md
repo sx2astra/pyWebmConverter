@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Encoding progress bar (0–100%, two-pass aware: pass 1 fills 0–50%, pass 2 fills 50–100%)
 - Cancel button during encoding — terminates the running FFmpeg process immediately
 - Drag & drop input file onto the main window
+- File pickers remember the last-used input directory between sessions; the output picker opens in the current output directory
 - Crop tool in the video editor — drag a selection on the preview to set a crop region
 - Keyboard shortcuts in the video editor: Space = play/pause, ← = previous frame, → = next frame
 - Video editor restores previous trim, crop, and rotation when reopened for the same file

@@ -333,8 +333,13 @@ class FFmpegGUI(QWidget):
         self._reset_editor_values()
 
     def browse_input(self):
-        """Open file dialog to select input video."""
-        fname, _ = QFileDialog.getOpenFileName(self, "Select Input Video")
+        """Open file dialog to select input video, starting in the last-used directory."""
+        start_dir = QSettings("pyWebmConverter", "pyWebmConverter").value(
+            "last_input_dir", ""
+        )
+        fname, _ = QFileDialog.getOpenFileName(
+            self, "Select Input Video", start_dir
+        )
         if fname:
             self.input_path.setText(fname)
             self.file_name.setText(os.path.splitext(os.path.basename(fname))[0])
@@ -342,7 +347,9 @@ class FFmpegGUI(QWidget):
 
     def browse_output(self):
         """Open folder dialog to select output directory."""
-        folder = QFileDialog.getExistingDirectory(self, "Select Output Directory")
+        folder = QFileDialog.getExistingDirectory(
+            self, "Select Output Directory", self.out_path.text().strip()
+        )
         if folder:
             self.out_path.setText(folder)
 
@@ -677,6 +684,9 @@ class FFmpegGUI(QWidget):
         """Persist current settings for the next session."""
         s = QSettings("pyWebmConverter", "pyWebmConverter")
         s.setValue("out_path", self.out_path.text().strip())
+        in_path = self.input_path.text().strip()
+        if in_path:
+            s.setValue("last_input_dir", os.path.dirname(in_path))
         s.setValue("file_size", self.file_size_input.text().strip())
         s.setValue("audio_index", self.audio_combo.currentIndex())
         s.setValue("scale_index", self.scale_combo.currentIndex())
