@@ -41,9 +41,9 @@ dev = [
 pywebmconverter = "pyWebmConverter.ffmpeg_gui:main"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/pyWebmConverter"
-"Bug Reports" = "https://github.com/yourusername/pyWebmConverter/issues"
-"Source Code" = "https://github.com/yourusername/pyWebmConverter"
+Homepage = "https://github.com/sx2astra/pyWebmConverter"
+"Bug Reports" = "https://github.com/sx2astra/pyWebmConverter/issues"
+"Source Code" = "https://github.com/sx2astra/pyWebmConverter"
 
 [tool.setuptools]
 packages = ["pyWebmConverter"]
