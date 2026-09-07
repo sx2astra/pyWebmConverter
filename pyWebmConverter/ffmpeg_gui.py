@@ -11,6 +11,8 @@ import sys
 import subprocess
 import re
 import os
+import shutil
+import tempfile
 from PyQt5.QtWidgets import (
     QApplication,
     QWidget,
@@ -52,7 +54,6 @@ from .constants import (
     AUTO_SIZE_MIN_MB,
     AUTO_SIZE_MAX_MB,
     AUDIO_CODEC_AAC,
-    TEMP_LOG_FILES,
     ERROR_NO_INPUT,
     ERROR_REQUIRED_FIELDS,
     ERROR_INVALID_FILESIZE,
@@ -170,6 +171,7 @@ class FFmpegGUI(QWidget):
         self.current_target_size_mb = None
         self.current_trim_prefix = None
         self.current_input_video = None
+        self.current_passlog_dir = None
         self.worker = None
         self.init_ui()
         self._load_settings()
@@ -527,11 +529,17 @@ class FFmpegGUI(QWidget):
         output_file = f"{out_dir}/{file_name}"
         title = os.path.splitext(file_name)[0]
 
+        # Two-pass writes a pass-log file; keep it in a temp dir instead of the CWD
+        passlog_prefix = ""
+        if use_2pass:
+            self.current_passlog_dir = tempfile.mkdtemp(prefix="pywebm_2pass_")
+            passlog_prefix = os.path.join(self.current_passlog_dir, "ffmpeg2pass")
+
         if is_mp4:
             cmd, cmd_pass2 = build_h264_encoding_commands(
                 input_video, output_file, video_bitrate,
                 audio == "on", audio_bitrate,
-                filters, use_2pass, trim_prefix, title,
+                filters, use_2pass, trim_prefix, title, passlog_prefix,
             )
             encoding_mode = "2-Pass" if use_2pass else "1-Pass"
             self.log.append(
@@ -543,7 +551,7 @@ class FFmpegGUI(QWidget):
                 input_video, output_file, video_bitrate,
                 audio == "on", audio_bitrate,
                 codec, cpu_used_2pass, cpu_used_1pass, tile_columns, maxrate_factor,
-                filters, use_2pass, trim_prefix, title,
+                filters, use_2pass, trim_prefix, title, passlog_prefix,
             )
             encoding_mode = "2-Pass" if use_2pass else "1-Pass"
             maxrate_pct = int(maxrate_factor * 100)
@@ -631,17 +639,6 @@ class FFmpegGUI(QWidget):
             self.open_folder_btn.setVisible(True)
             notify_complete(final_size_mb, self.current_target_size_mb)
 
-            # Clean up temporary ffmpeg files
-            for temp_file in TEMP_LOG_FILES:
-                try:
-                    if os.path.exists(temp_file):
-                        os.remove(temp_file)
-                except OSError as e:
-                    self.log.append(
-                        f"<span style='color:orange'>"
-                        f"Warning: Could not delete {temp_file}: {e}</span>"
-                    )
-
             # Reset input fields for next conversion
             self.input_path.clear()
             self.file_name.clear()
@@ -651,6 +648,12 @@ class FFmpegGUI(QWidget):
                 f"<span style='color:red'>ffmpeg exited with code {code}."
                 " Check the log above for details.</span>"
             )
+
+        # Remove the two-pass pass-log directory (success, failure, or cancel)
+        if self.current_passlog_dir:
+            shutil.rmtree(self.current_passlog_dir, ignore_errors=True)
+            self.current_passlog_dir = None
+
         self.progress_bar.setVisible(False)
         self.cancel_btn.setVisible(False)
         self.start_btn.setEnabled(True)

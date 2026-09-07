@@ -27,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Timeline slider seek debounced (25 ms) to avoid hammering the decoder on every drag pixel
 - Settings (output directory, file size, audio, scale, 2-pass, AV1) now persisted between sessions via QSettings
 
+### Fixed
+
+- Two-pass encoding no longer leaves `ffmpeg2pass-*.log` files in the working directory — pass logs are written to a temporary directory and removed after every run (success, failure, or cancel)
+
 ---
 
 ## [1.2.0] "WhimsicalWispa" - 2026-06-22

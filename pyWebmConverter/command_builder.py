@@ -284,6 +284,7 @@ def build_encoding_commands(
     use_2pass: bool,
     trim_prefix: str = "",
     title: str = "",
+    passlog_prefix: str = "",
 ) -> tuple:
     """
     Build complete ffmpeg encoding commands for 1-pass or 2-pass encoding.
@@ -302,6 +303,8 @@ def build_encoding_commands(
         filters: Video filter chain
         use_2pass: Whether to use 2-pass encoding
         trim_prefix: Optional trim parameters
+        passlog_prefix: Path prefix for -passlogfile (keeps pass logs out of the CWD);
+            empty string lets ffmpeg use its default ffmpeg2pass-0.log in the CWD
 
     Returns:
         Tuple of (command_pass1, command_pass2 or None)
@@ -325,11 +328,13 @@ def build_encoding_commands(
 
     # Build pass commands
     if use_2pass:
+        passlog = f'-passlogfile "{passlog_prefix}" ' if passlog_prefix else ""
         # Pass 1: No audio, only video
-        cmd_pass1 = base_cmd + f"-pass 1 -f {OUTPUT_FORMAT} nul"
+        cmd_pass1 = base_cmd + f"-pass 1 {passlog}-f {OUTPUT_FORMAT} nul"
         # Pass 2: Add audio, metadata, and output
         cmd_pass2 = (
-            base_cmd + f"-pass 2 {audio_params}{metadata}" + f'-f {OUTPUT_FORMAT} "{output_file}"'
+            base_cmd + f"-pass 2 {passlog}{audio_params}{metadata}"
+            + f'-f {OUTPUT_FORMAT} "{output_file}"'
         )
         return cmd_pass1, cmd_pass2
 
@@ -367,6 +372,7 @@ def build_h264_encoding_commands(
     use_2pass: bool,
     trim_prefix: str = "",
     title: str = "",
+    passlog_prefix: str = "",
 ) -> tuple:
     """
     Build complete ffmpeg encoding commands for H.264/AAC MP4 output.
@@ -381,6 +387,8 @@ def build_h264_encoding_commands(
         use_2pass: Whether to use 2-pass encoding
         trim_prefix: Optional trim parameters
         title: Optional metadata title
+        passlog_prefix: Path prefix for -passlogfile (keeps pass logs out of the CWD);
+            empty string lets ffmpeg use its default ffmpeg2pass-0.log in the CWD
 
     Returns:
         Tuple of (command_pass1, command_pass2 or None)
@@ -404,9 +412,10 @@ def build_h264_encoding_commands(
     metadata = f'-metadata title="{title}" ' if title else ""
 
     if use_2pass:
-        cmd_pass1 = base_cmd + "-pass 1 -an -f null nul"
+        passlog = f'-passlogfile "{passlog_prefix}" ' if passlog_prefix else ""
+        cmd_pass1 = base_cmd + f"-pass 1 {passlog}-an -f null nul"
         cmd_pass2 = (
-            base_cmd + f"-pass 2 {audio_params}{metadata}"
+            base_cmd + f"-pass 2 {passlog}{audio_params}{metadata}"
             + f'-f {OUTPUT_FORMAT_MP4} "{output_file}"'
         )
         return cmd_pass1, cmd_pass2

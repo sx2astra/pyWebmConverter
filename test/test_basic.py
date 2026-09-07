@@ -149,6 +149,25 @@ def test_build_2pass_returns_both_commands():
     assert "-pass 2" in cmd2
 
 
+def test_build_2pass_passlogfile_when_prefix_given():
+    cmd1, cmd2 = build_encoding_commands(
+        "in.mp4", "out.webm", 500_000, False, 0,
+        CODEC_VP9, 0, 6, 1, 1.0, "scale=iw*1.0:ih*1.0", use_2pass=True,
+        passlog_prefix="/tmp/xyz/ffmpeg2pass",
+    )
+    assert '-passlogfile "/tmp/xyz/ffmpeg2pass"' in cmd1
+    assert '-passlogfile "/tmp/xyz/ffmpeg2pass"' in cmd2
+
+
+def test_build_2pass_no_passlogfile_by_default():
+    cmd1, cmd2 = build_encoding_commands(
+        "in.mp4", "out.webm", 500_000, False, 0,
+        CODEC_VP9, 0, 6, 1, 1.0, "scale=iw*1.0:ih*1.0", use_2pass=True,
+    )
+    assert "-passlogfile" not in cmd1
+    assert "-passlogfile" not in cmd2
+
+
 def test_build_command_includes_audio():
     cmd, _ = build_encoding_commands(
         "in.mp4", "out.webm", 500_000, True, 96_000,

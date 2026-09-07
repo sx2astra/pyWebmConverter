@@ -138,7 +138,6 @@ WAVEFORM_SAMPLE_RATE = 4000  # Hz — low enough to keep RAM reasonable, high en
 
 # Temporary file settings
 TEMP_FILE_PREFIX = "temp__"
-TEMP_LOG_FILES = ["ffmpeg2pass-0.log", "ffmpeg-mbtree.log", "ffmpeg-mbtree.log.mbtree"]
 
 # Format settings
 OUTPUT_FORMAT = "webm"
