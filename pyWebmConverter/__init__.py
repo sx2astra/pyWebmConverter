@@ -10,6 +10,9 @@ __all__ = [
     "command_builder",
     "audio_processor",
     "ffmpeg_worker",
+    "ffmpeg_gui",
     "video_editor",
+    "waveform",
+    "notifier",
     "constants",
 ]

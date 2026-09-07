@@ -36,7 +36,7 @@ pip install -e ".[dev]"
 
 Before releasing, ensure:
 
-- [ ] Version updated in `setup.py` and `__init__.py`
+- [ ] Version updated in `pyWebmConverter/__init__.py` (single source; `pyproject.toml` reads it dynamically)
 - [ ] `CHANGELOG.md` updated with new version entry
 - [ ] All tests pass: `pytest --cov=pyWebmConverter`
 - [ ] Code quality checks pass: `pylint pyWebmConverter/`
@@ -46,8 +46,7 @@ Before releasing, ensure:
 ## Release Process
 
 1. **Update Version**:
-   - Edit `setup.py` (version field)
-   - Edit `pyWebmConverter/__init__.py` (__version__ field)
+   - Edit `pyWebmConverter/__init__.py` (`__version__` field — `pyproject.toml` reads it dynamically)
    - Update `CHANGELOG.md`
 
 2. **Run Tests**:
