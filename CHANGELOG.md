@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.2.0] "WhimsicalWispa" - 2026-06-22
 
 ### Added
+
 - Resolution-based scaling options (480p, 720p, 1080p) in addition to percentage-based scaling
 - Frame-by-frame navigation in video editor (← Frame / Frame → buttons)
 - Set Start / Set End buttons in video editor to mark trim points at the current frame
@@ -58,10 +59,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - "Could not determine video dimensions" error after resolution scaling was introduced — switched from fragile `ffmpeg -i` + regex parsing to `ffprobe` with structured CSV output
 - Git folder casing corrected from `pyWebMConverter` to `pyWebmConverter`
 
-
 ## [1.1.0] "XenialXuixo" - 2026-06-17
 
 ### Added
+
 - Full PyQt5 graphical user interface
 - Video editor dialog for preview, trimming, rotation, and scaling
 - FFmpeg command builder with codec and quality optimization
@@ -72,13 +73,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configuration constants for centralized parameter management
 
 ### Changed
+
 - Replaced conf.ini configuration with constants-based settings
 - Refactored encoding pipeline into modular components
 - Enhanced documentation with encoding logic and feature descriptions
 
-## [1.0.0] - 2024-XX-XX
+## [1.0.0] - 2022-07-16
 
 ### Added
+
 - Initial public release
 - FFmpeg-based WebM video converter with PyQt5 GUI
 - Support for VP9 and AV1 video codecs
@@ -89,17 +92,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive test suite
 
 ### Fixed
+
 - Cleaned up project structure for production release
 - Removed obsolete dependencies
 
 ### Changed
+
 - Migrated to modern Python packaging (setup.py, pyproject.toml)
 - Updated documentation for GitHub release
 
 ## Development Guidelines
 
 When updating this changelog:
+
 - Add new changes under an `[Unreleased]` section at the top
 - Follow the existing format
 - Categorize changes: Added, Changed, Deprecated, Removed, Fixed, Security
-- Link to comparative view: `[1.0.0]: https://github.com/yourusername/pyWebmConverter/releases/tag/v1.0.0`
+- Add a comparison link for each version at the bottom of the file (see below)
+
+[1.2.0]: https://github.com/sx2astra/pyWebmConverter/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/sx2astra/pyWebmConverter/compare/v1.0...v1.1.0
+[1.0.0]: https://github.com/sx2astra/pyWebmConverter/releases/tag/v1.0
