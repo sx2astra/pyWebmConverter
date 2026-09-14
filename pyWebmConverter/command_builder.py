@@ -3,6 +3,8 @@ FFmpeg command building utilities for WebM encoding.
 Handles command construction for both VP9 and AV1 codecs with 1-pass and 2-pass encoding.
 """
 
+from __future__ import annotations
+
 from .constants import (
     CODEC_VP9,
     CODEC_AV1,

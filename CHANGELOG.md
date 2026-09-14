@@ -7,7 +7,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.0-dev] "VictoriousVla" - Unreleased
+## [1.3.0] "VictoriousVla" - 2026-09-13
 
 ### Added
 
@@ -115,6 +115,7 @@ When updating this changelog:
 - Categorize changes: Added, Changed, Deprecated, Removed, Fixed, Security
 - Add a comparison link for each version at the bottom of the file (see below)
 
+[1.3.0]: https://github.com/sx2astra/pyWebmConverter/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/sx2astra/pyWebmConverter/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/sx2astra/pyWebmConverter/compare/v1.0...v1.1.0
 [1.0.0]: https://github.com/sx2astra/pyWebmConverter/releases/tag/v1.0
