@@ -11,12 +11,15 @@ import sys
 import subprocess
 import re
 import os
+import shutil
+import tempfile
 from PyQt5.QtWidgets import (
     QApplication,
     QWidget,
     QLabel,
     QLineEdit,
     QPushButton,
+    QProgressBar,
     QFileDialog,
     QVBoxLayout,
     QHBoxLayout,
@@ -25,26 +28,32 @@ from PyQt5.QtWidgets import (
     QDialog,
     QCheckBox,
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QSettings
 
 # Import from modular components
 from .video_editor import VideoEditorDialog
 from .ffmpeg_worker import FFmpegWorker
 from .audio_processor import adjust_audio_bitrate
+from .notifier import notify_complete
 from .command_builder import (
     select_codec_and_factors,
     get_auto_scale_factor,
     build_video_filters,
     build_encoding_commands,
+    build_h264_encoding_commands,
 )
 from .constants import (
     DEFAULT_FILE_SIZE_MB,
-    DEFAULT_AUDIO,
     DEFAULT_AUDIO_OPTIONS,
     DEFAULT_SCALE_OPTIONS,
+    DEFAULT_FPS_OPTIONS,
+    DEFAULT_OUTPUT_FORMAT_OPTIONS,
     DEFAULT_2PASS,
     DEFAULT_AV1,
-    TEMP_LOG_FILES,
+    AUTO_SIZE_MB_PER_SECOND,
+    AUTO_SIZE_MIN_MB,
+    AUTO_SIZE_MAX_MB,
+    AUDIO_CODEC_AAC,
     ERROR_NO_INPUT,
     ERROR_REQUIRED_FIELDS,
     ERROR_INVALID_FILESIZE,
@@ -87,7 +96,7 @@ def get_video_duration(input_path: str) -> float:
         Duration in seconds, or None if unable to determine
     """
     cmd = ["ffmpeg", "-i", input_path]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
     output = proc.stderr  # Duration info is in stderr
     match = re.search(r"Duration: (\d+):(\d+):(\d+\.\d+)", output)
     if match:
@@ -120,7 +129,8 @@ def get_video_dimensions(input_path: str) -> tuple:
     ]
     try:
         proc = subprocess.run(
-            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace"
+            cmd, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", check=False,
         )
     except FileNotFoundError:
         return None, None
@@ -147,13 +157,24 @@ class FFmpegGUI(QWidget):
     def __init__(self):
         """Initialize the GUI window."""
         super().__init__()
-        # Store editor results
+        self.setAcceptDrops(True)
         self.editor_values = {
             "start_time": None,
             "duration": None,
             "rotation": 0,
+            "crop": None,
         }
+        # Conversion state — populated in start_conversion, read in on_conversion_finished
+        self.current_output_file = None
+        self.current_audio = None
+        self.current_audio_codec = None
+        self.current_target_size_mb = None
+        self.current_trim_prefix = None
+        self.current_input_video = None
+        self.current_passlog_dir = None
+        self.worker = None
         self.init_ui()
+        self._load_settings()
 
     def init_ui(self):
         """Set up all UI elements."""
@@ -200,14 +221,28 @@ class FFmpegGUI(QWidget):
         layout.addWidget(self.scale_label)
         layout.addWidget(self.scale_combo)
 
+        # Frame rate section
+        fps_label_layout = QHBoxLayout()
+        fps_label_layout.addWidget(QLabel("Output Frame Rate:"))
+        self.fps_combo = QComboBox()
+        self.fps_combo.addItems(DEFAULT_FPS_OPTIONS)
+        fps_label_layout.addWidget(self.fps_combo)
+        fps_label_layout.addStretch()
+        layout.addLayout(fps_label_layout)
+
         # Target File Size section
-        self.file_size_label = QLabel("Target File Size (MB):")
+        file_size_header = QHBoxLayout()
+        file_size_header.addWidget(QLabel("Target File Size (MB):"))
+        file_size_header.addStretch()
+        self.auto_size_checkbox = QCheckBox("Auto")
+        self.auto_size_checkbox.toggled.connect(self._on_auto_size_toggled)
+        file_size_header.addWidget(self.auto_size_checkbox)
+        layout.addLayout(file_size_header)
         self.file_size_input = QLineEdit()
         self.file_size_input.setPlaceholderText(
             "Enter target size (e.g., 3.0 for ~4MB, 8.0 for ~10MB)"
         )
         self.file_size_input.setText(str(DEFAULT_FILE_SIZE_MB))
-        layout.addWidget(self.file_size_label)
         layout.addWidget(self.file_size_input)
 
         # Override target size for bitrate calculation (optional)
@@ -228,6 +263,16 @@ class FFmpegGUI(QWidget):
         layout.addWidget(self.audio_label)
         layout.addWidget(self.audio_combo)
 
+        # Output format
+        format_layout = QHBoxLayout()
+        format_layout.addWidget(QLabel("Output Format:"))
+        self.format_combo = QComboBox()
+        self.format_combo.addItems(DEFAULT_OUTPUT_FORMAT_OPTIONS)
+        self.format_combo.currentIndexChanged.connect(self._on_format_changed)
+        format_layout.addWidget(self.format_combo)
+        format_layout.addStretch()
+        layout.addLayout(format_layout)
+
         # AV1 codec support checkbox
         self.av1_checkbox = QCheckBox("Allow AV1 codec (for systems that support it)")
         self.av1_checkbox.setChecked(DEFAULT_AV1)
@@ -239,14 +284,32 @@ class FFmpegGUI(QWidget):
         layout.addWidget(self.twopass_checkbox)
 
         # Start button
+        start_cancel_layout = QHBoxLayout()
         self.start_btn = QPushButton("Start Conversion")
         self.start_btn.clicked.connect(self.start_conversion)
-        layout.addWidget(self.start_btn)
+        start_cancel_layout.addWidget(self.start_btn)
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.clicked.connect(self.cancel_conversion)
+        self.cancel_btn.setVisible(False)
+        start_cancel_layout.addWidget(self.cancel_btn)
+        layout.addLayout(start_cancel_layout)
 
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMinimum(0)
+        self.progress_bar.setMaximum(100)
+        self.progress_bar.setVisible(False)
+        layout.addWidget(self.progress_bar)
+
+        post_layout = QHBoxLayout()
+        self.preview_btn = QPushButton("Preview Result")
+        self.preview_btn.clicked.connect(self.preview_output)
+        self.preview_btn.setVisible(False)
+        post_layout.addWidget(self.preview_btn)
         self.open_folder_btn = QPushButton("Open Output Folder")
         self.open_folder_btn.clicked.connect(self.open_output_folder)
         self.open_folder_btn.setVisible(False)
-        layout.addWidget(self.open_folder_btn)
+        post_layout.addWidget(self.open_folder_btn)
+        layout.addLayout(post_layout)
 
         # Output log section
         self.log = QTextEdit()
@@ -255,16 +318,38 @@ class FFmpegGUI(QWidget):
 
         self.setLayout(layout)
 
+    def dragEnterEvent(self, event):
+        """Accept drag events that carry a local video file."""
+        if event.mimeData().hasUrls() and event.mimeData().urls()[0].isLocalFile():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        """Handle a dropped file the same way as Browse."""
+        fname = event.mimeData().urls()[0].toLocalFile()
+        self.input_path.setText(fname)
+        self.file_name.setText(os.path.splitext(os.path.basename(fname))[0])
+        self._reset_editor_values()
+
     def browse_input(self):
-        """Open file dialog to select input video."""
-        fname, _ = QFileDialog.getOpenFileName(self, "Select Input Video")
+        """Open file dialog to select input video, starting in the last-used directory."""
+        start_dir = QSettings("pyWebmConverter", "pyWebmConverter").value(
+            "last_input_dir", ""
+        )
+        fname, _ = QFileDialog.getOpenFileName(
+            self, "Select Input Video", start_dir
+        )
         if fname:
             self.input_path.setText(fname)
             self.file_name.setText(os.path.splitext(os.path.basename(fname))[0])
+            self._reset_editor_values()
 
     def browse_output(self):
         """Open folder dialog to select output directory."""
-        folder = QFileDialog.getExistingDirectory(self, "Select Output Directory")
+        folder = QFileDialog.getExistingDirectory(
+            self, "Select Output Directory", self.out_path.text().strip()
+        )
         if folder:
             self.out_path.setText(folder)
 
@@ -275,8 +360,8 @@ class FFmpegGUI(QWidget):
             self.log.append(f"<span style='color:red'>{ERROR_NO_INPUT}</span>")
             return
 
-        # Open video editor dialog
-        editor = VideoEditorDialog(input_video, self)
+        # Open video editor dialog, restoring previous edit values
+        editor = VideoEditorDialog(input_video, self, initial_values=self.editor_values)
         if editor.exec_() == QDialog.Accepted:
             self.editor_values = editor.get_edit_values()
             start = self.editor_values["start_time"]
@@ -294,8 +379,8 @@ class FFmpegGUI(QWidget):
         input_video = self.input_path.text().strip()
         out_dir = self.out_path.text().strip()
         file_name = self.file_name.text().strip()
-        if file_name and not file_name.endswith(".webm"):
-            file_name += ".webm"
+        if file_name and not os.path.splitext(file_name)[1]:
+            file_name += ".mp4" if self.format_combo.currentIndex() == 1 else ".webm"
         self.file_name.setText(file_name)
         scale = self.scale_combo.currentText()
         audio = self.audio_combo.currentText()
@@ -305,17 +390,21 @@ class FFmpegGUI(QWidget):
             self.log.append(f"<span style='color:red'>{ERROR_REQUIRED_FIELDS}</span>")
             return
 
-        # Get and validate target file size
-        try:
-            file_size_mb = float(self.file_size_input.text().strip())
-            if file_size_mb <= 0:
+        # Validate manual file size up-front (auto mode skips this)
+        manual_file_size_mb = None
+        if not self.auto_size_checkbox.isChecked():
+            try:
+                manual_file_size_mb = float(self.file_size_input.text().strip())
+                if manual_file_size_mb <= 0:
+                    self.log.append(
+                        f"<span style='color:red'>{ERROR_FILESIZE_NEGATIVE}</span>"
+                    )
+                    return
+            except ValueError:
                 self.log.append(
-                    f"<span style='color:red'>{ERROR_FILESIZE_NEGATIVE}</span>"
+                    f"<span style='color:red'>{ERROR_INVALID_FILESIZE}</span>"
                 )
                 return
-        except ValueError:
-            self.log.append(f"<span style='color:red'>{ERROR_INVALID_FILESIZE}</span>")
-            return
 
         # Get and validate override target size (optional)
         override_size_mb = None
@@ -350,6 +439,19 @@ class FFmpegGUI(QWidget):
             duration_s = full_duration_s
             trim_prefix = ""
 
+        # Resolve file size — auto-compute from clip duration if requested
+        if self.auto_size_checkbox.isChecked():
+            file_size_mb = max(
+                AUTO_SIZE_MIN_MB,
+                min(AUTO_SIZE_MAX_MB, duration_s * AUTO_SIZE_MB_PER_SECOND),
+            )
+            self.log.append(
+                f"<span style='color:blue'>Auto target size: {file_size_mb:.2f} MB"
+                f" ({duration_s:.1f}s × {AUTO_SIZE_MB_PER_SECOND} MB/s)</span>"
+            )
+        else:
+            file_size_mb = manual_file_size_mb
+
         # Calculate bitrate from target file size.
         # Safety margin reserves headroom for WebM container overhead and VP9/AV1
         # rate control variance so the output reliably stays under the limit.
@@ -373,19 +475,29 @@ class FFmpegGUI(QWidget):
             audio_bitrate = 0
             video_bitrate = total_bitrate
 
-        # Auto-select codec based on bitrate
-        allow_av1 = self.av1_checkbox.isChecked()
         use_2pass = self.twopass_checkbox.isChecked()
-        codec, cpu_used_2pass, cpu_used_1pass, tile_columns, maxrate_factor = (
-            select_codec_and_factors(file_size_mb, video_bitrate, allow_av1)
-        )
+        is_mp4 = self.format_combo.currentIndex() == 1
+
+        # Codec selection (WebM only — MP4 always uses H.264)
+        codec = cpu_used_2pass = cpu_used_1pass = tile_columns = maxrate_factor = None
+        if not is_mp4:
+            allow_av1 = self.av1_checkbox.isChecked()
+            codec, cpu_used_2pass, cpu_used_1pass, tile_columns, maxrate_factor = (
+                select_codec_and_factors(video_bitrate, allow_av1)
+            )
 
         # Parse scale and intelligently adjust
         res_target_height = (
             None  # set for resolution-based scaling ("480p", "720p", "1080p")
         )
         if scale == "Auto":
-            factor, scale_desc = get_auto_scale_factor(file_size_mb, video_bitrate)
+            _, src_h = get_video_dimensions(input_video)
+            factor, scale_desc = get_auto_scale_factor(
+                file_size_mb, video_bitrate, src_h or 0
+            )
+            if src_h and factor < 1.0:
+                res_target_height = round(src_h * factor)
+                factor = 1.0  # unused — res_target_height takes over
             self.log.append(
                 f"<span style='color:blue'>Auto-scaling: {scale_desc}</span>"
             )
@@ -407,46 +519,60 @@ class FFmpegGUI(QWidget):
             # Percentage-based scaling (2x, 0.75x, etc.)
             factor = float(scale[:-1])
 
+        # Resolve output frame rate
+        fps_text = self.fps_combo.currentText()
+        output_fps = None if fps_text == "Auto" else int(fps_text)
+
         # Build video filters
         filters = build_video_filters(
             factor,
             self.editor_values["rotation"],
             target_height=res_target_height,
+            crop=self.editor_values["crop"],
+            fps=output_fps,
         )
 
         # Build ffmpeg commands
         output_file = f"{out_dir}/{file_name}"
         title = os.path.splitext(file_name)[0]
-        cmd, cmd_pass2 = build_encoding_commands(
-            input_video,
-            output_file,
-            video_bitrate,
-            audio == "on",
-            audio_bitrate,
-            codec,
-            cpu_used_2pass,
-            cpu_used_1pass,
-            tile_columns,
-            maxrate_factor,
-            filters,
-            use_2pass,
-            trim_prefix,
-            title,
-        )
 
-        encoding_mode = "2-Pass" if use_2pass else "1-Pass"
-        maxrate_pct = int(maxrate_factor * 100)
-        base_info = (
-            f"<span style='color:blue'>Using {codec} ({encoding_mode}) | "
-            f"Bitrate: {video_bitrate}bps | Maxrate cap: {maxrate_pct}% | "
-            f"Target: {file_size_mb}MB"
-        )
-        if override_size_mb is not None:
+        # Two-pass writes a pass-log file; keep it in a temp dir instead of the CWD
+        passlog_prefix = ""
+        if use_2pass:
+            self.current_passlog_dir = tempfile.mkdtemp(prefix="pywebm_2pass_")
+            passlog_prefix = os.path.join(self.current_passlog_dir, "ffmpeg2pass")
+
+        if is_mp4:
+            cmd, cmd_pass2 = build_h264_encoding_commands(
+                input_video, output_file, video_bitrate,
+                audio == "on", audio_bitrate,
+                filters, use_2pass, trim_prefix, title, passlog_prefix,
+            )
+            encoding_mode = "2-Pass" if use_2pass else "1-Pass"
             self.log.append(
-                base_info + f" | Bitrate calc from: {override_size_mb}MB</span>"
+                f"<span style='color:blue'>Using H.264/AAC ({encoding_mode}) | "
+                f"Bitrate: {video_bitrate}bps | Target: {file_size_mb}MB</span>"
             )
         else:
-            self.log.append(base_info + "</span>")
+            cmd, cmd_pass2 = build_encoding_commands(
+                input_video, output_file, video_bitrate,
+                audio == "on", audio_bitrate,
+                codec, cpu_used_2pass, cpu_used_1pass, tile_columns, maxrate_factor,
+                filters, use_2pass, trim_prefix, title, passlog_prefix,
+            )
+            encoding_mode = "2-Pass" if use_2pass else "1-Pass"
+            maxrate_pct = int(maxrate_factor * 100)
+            base_info = (
+                f"<span style='color:blue'>Using {codec} ({encoding_mode}) | "
+                f"Bitrate: {video_bitrate}bps | Maxrate cap: {maxrate_pct}% | "
+                f"Target: {file_size_mb}MB"
+            )
+            if override_size_mb is not None:
+                self.log.append(
+                    base_info + f" | Bitrate calc from: {override_size_mb}MB</span>"
+                )
+            else:
+                self.log.append(base_info + "</span>")
         self.log.append(
             "<span style='color:blue'>"
             "Quality Focus: 10-bit encoding with detailed parameters.</span>"
@@ -458,15 +584,22 @@ class FFmpegGUI(QWidget):
         # Store for later use in on_conversion_finished
         self.current_output_file = output_file
         self.current_audio = audio
+        self.current_audio_codec = AUDIO_CODEC_AAC if is_mp4 else "libopus"
         self.current_target_size_mb = file_size_mb
         self.current_trim_prefix = trim_prefix
         self.current_input_video = input_video
 
         # Start conversion
+        self._save_settings()
+        self.preview_btn.setVisible(False)
         self.open_folder_btn.setVisible(False)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setVisible(True)
         self.start_btn.setEnabled(False)
-        self.worker = FFmpegWorker(cmd, cmd_pass2)
+        self.cancel_btn.setVisible(True)
+        self.worker = FFmpegWorker(cmd, cmd_pass2, duration_s=duration_s)
         self.worker.log_signal.connect(self.log.append)
+        self.worker.progress_signal.connect(self.progress_bar.setValue)
         self.worker.finished_signal.connect(self.on_conversion_finished)
         self.worker.start()
 
@@ -485,12 +618,14 @@ class FFmpegGUI(QWidget):
             if hasattr(self, "current_audio") and self.current_audio == "on":
                 self.log.append(INFO_AUDIO_ADJUSTMENT_START)
                 trim_prefix = getattr(self, "current_trim_prefix", "")
+                audio_codec = getattr(self, "current_audio_codec", "libopus")
                 final_audio_bitrate = adjust_audio_bitrate(
                     self.current_input_video,
                     self.current_output_file,
                     self.current_target_size_mb,
                     self.log.append,
                     trim_prefix,
+                    audio_codec,
                 )
                 self.log.append(
                     INFO_AUDIO_ADJUSTMENT_COMPLETE.format(final_audio_bitrate)
@@ -507,36 +642,98 @@ class FFmpegGUI(QWidget):
                 f"Output: {final_size_mb:.2f} MB / {self.current_target_size_mb:.1f} MB"
                 f" target ({pct:.1f}%)</span>"
             )
+            self.preview_btn.setVisible(True)
             self.open_folder_btn.setVisible(True)
-
-            # Clean up temporary ffmpeg files
-            for temp_file in TEMP_LOG_FILES:
-                try:
-                    if os.path.exists(temp_file):
-                        os.remove(temp_file)
-                except OSError as e:
-                    self.log.append(
-                        f"<span style='color:orange'>"
-                        f"Warning: Could not delete {temp_file}: {e}</span>"
-                    )
+            notify_complete(final_size_mb, self.current_target_size_mb)
 
             # Reset input fields for next conversion
             self.input_path.clear()
             self.file_name.clear()
-            # Reset editor values
-            self.editor_values = {
-                "start_time": None,
-                "duration": None,
-                "rotation": 0,
-            }
             self.log.append(INFO_READY)
         else:
             self.log.append(
                 f"<span style='color:red'>ffmpeg exited with code {code}."
                 " Check the log above for details.</span>"
             )
+
+        # Remove the two-pass pass-log directory (success, failure, or cancel)
+        if self.current_passlog_dir:
+            shutil.rmtree(self.current_passlog_dir, ignore_errors=True)
+            self.current_passlog_dir = None
+
+        self.progress_bar.setVisible(False)
+        self.cancel_btn.setVisible(False)
         self.start_btn.setEnabled(True)
 
+    def _load_settings(self):
+        """Restore persisted settings from the previous session."""
+        s = QSettings("pyWebmConverter", "pyWebmConverter")
+        out = s.value("out_path", "")
+        if out:
+            self.out_path.setText(out)
+        self.file_size_input.setText(s.value("file_size", str(DEFAULT_FILE_SIZE_MB)))
+        self.audio_combo.setCurrentIndex(int(s.value("audio_index", 0)))
+        self.scale_combo.setCurrentIndex(int(s.value("scale_index", 0)))
+        self.fps_combo.setCurrentIndex(int(s.value("fps_index", 0)))
+        self.format_combo.setCurrentIndex(int(s.value("format_index", 0)))
+        self.twopass_checkbox.setChecked(s.value("use_2pass", DEFAULT_2PASS, type=bool))
+        self.av1_checkbox.setChecked(s.value("allow_av1", DEFAULT_AV1, type=bool))
+        self.auto_size_checkbox.setChecked(s.value("auto_size", False, type=bool))
+
+    def _save_settings(self):
+        """Persist current settings for the next session."""
+        s = QSettings("pyWebmConverter", "pyWebmConverter")
+        s.setValue("out_path", self.out_path.text().strip())
+        in_path = self.input_path.text().strip()
+        if in_path:
+            s.setValue("last_input_dir", os.path.dirname(in_path))
+        s.setValue("file_size", self.file_size_input.text().strip())
+        s.setValue("audio_index", self.audio_combo.currentIndex())
+        s.setValue("scale_index", self.scale_combo.currentIndex())
+        s.setValue("fps_index", self.fps_combo.currentIndex())
+        s.setValue("format_index", self.format_combo.currentIndex())
+        s.setValue("use_2pass", self.twopass_checkbox.isChecked())
+        s.setValue("allow_av1", self.av1_checkbox.isChecked())
+        s.setValue("auto_size", self.auto_size_checkbox.isChecked())
+
+    def _on_format_changed(self, index: int):
+        """Disable AV1 option when MP4 output is selected (H.264 only)."""
+        is_mp4 = index == 1
+        self.av1_checkbox.setEnabled(not is_mp4)
+        if is_mp4:
+            self.av1_checkbox.setChecked(False)
+
+    def _on_auto_size_toggled(self, checked: bool):
+        """Enable or disable the file size text field based on the Auto checkbox."""
+        self.file_size_input.setEnabled(not checked)
+        if checked:
+            self.file_size_input.setPlaceholderText("computed from clip duration")
+            self.file_size_input.clear()
+        else:
+            self.file_size_input.setPlaceholderText(
+                "Enter target size (e.g., 3.0 for ~4MB, 8.0 for ~10MB)"
+            )
+            self.file_size_input.setText(str(DEFAULT_FILE_SIZE_MB))
+
+    def preview_output(self):
+        """Open the encoded output in a read-only video preview dialog."""
+        dialog = VideoEditorDialog(self.current_output_file, self, read_only=True)
+        dialog.exec_()
+        dialog.cap.release()
+
+    def cancel_conversion(self):
+        """Cancel the running ffmpeg process."""
+        if self.worker:
+            self.worker.cancel()
+
+    def _reset_editor_values(self):
+        """Clear trim/crop/rotation state when a new input file is chosen."""
+        self.editor_values = {
+            "start_time": None,
+            "duration": None,
+            "rotation": 0,
+            "crop": None,
+        }
 
     def open_output_folder(self):
         """Open the output directory in Windows Explorer."""

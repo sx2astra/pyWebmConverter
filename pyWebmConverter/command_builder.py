@@ -3,9 +3,12 @@ FFmpeg command building utilities for WebM encoding.
 Handles command construction for both VP9 and AV1 codecs with 1-pass and 2-pass encoding.
 """
 
+from __future__ import annotations
+
 from .constants import (
     CODEC_VP9,
     CODEC_AV1,
+    CODEC_H264,
     AV1_BITRATE_THRESHOLD,
     VP9_ULTRA_LOW_THRESHOLD,
     VP9_VERY_LOW_THRESHOLD,
@@ -42,18 +45,20 @@ from .constants import (
     VP9_ENABLE_TPL,
     AV1_TILE_ROWS,
     OUTPUT_FORMAT,
+    OUTPUT_FORMAT_MP4,
     ROTATION_ANGLES,
+    H264_PRESET_2PASS,
+    H264_PRESET_1PASS,
+    H264_PROFILE,
+    H264_LEVEL,
 )
 
 
-def select_codec_and_factors(
-    file_size_mb: float, video_bitrate: int, allow_av1: bool
-) -> tuple:
+def select_codec_and_factors(video_bitrate: int, allow_av1: bool) -> tuple:
     """
-    Select the best codec and rate control factors based on bitrate and file size.
+    Select the best codec and rate control factors based on bitrate.
 
     Args:
-        file_size_mb: Target file size in MB
         video_bitrate: Video bitrate in bits per second
         allow_av1: Whether AV1 codec is allowed
 
@@ -66,19 +71,44 @@ def select_codec_and_factors(
     return CODEC_VP9, CPU_USED_2PASS, CPU_USED_1PASS, 1, MAXRATE_FACTOR_VP9
 
 
-def get_auto_scale_factor(file_size_mb: float, video_bitrate: int) -> tuple[float, str]:
+def get_auto_scale_factor(
+    file_size_mb: float, video_bitrate: int, source_height: int = 0
+) -> tuple[float, str]:
     """
-    Calculate auto-scaling factor and message based on file size and bitrate.
+    Calculate auto-scaling factor and message based on file size, bitrate, and source height.
 
     Args:
         file_size_mb: Target file size in MB
         video_bitrate: Video bitrate in bits per second
+        source_height: Source video height in pixels (0 = unknown, falls back to bitrate-only logic)
 
     Returns:
         Tuple of (scale_factor, description_message)
     """
     if file_size_mb < FILESIZE_TINY:
         return SCALE_FACTOR_TINY, "0.2x (tiny file, critical compression)"
+
+    if source_height:
+        # Map bitrate budget to the highest output height that will encode well
+        if video_bitrate >= 6_000_000:
+            target_h = 0          # 6+ Mbps: native is fine
+        elif video_bitrate >= 2_500_000:
+            target_h = 1080       # 2.5–6 Mbps → 1080p cap
+        elif video_bitrate >= 800_000:
+            target_h = 720        # 0.8–2.5 Mbps → 720p cap
+        elif video_bitrate >= 400_000:
+            target_h = 480        # 0.4–0.8 Mbps → 480p cap
+        elif video_bitrate >= 150_000:
+            target_h = 360        # 0.15–0.4 Mbps → 360p cap
+        else:
+            target_h = 240        # < 0.15 Mbps → 240p cap
+
+        if target_h and source_height > target_h:
+            factor = round(target_h / source_height, 4)
+            return factor, f"{factor:.2f}x → {target_h}p ({video_bitrate // 1000} kbps budget)"
+        return SCALE_FACTOR_NATIVE, "1.0x (source resolution fits bitrate budget)"
+
+    # Fallback when source dimensions are unknown — use bitrate + file size thresholds
     if video_bitrate < VP9_ULTRA_LOW_THRESHOLD:
         return SCALE_FACTOR_EXTREME, "0.25x (extremely low bitrate)"
     if (
@@ -101,33 +131,43 @@ def build_video_filters(
     scale_factor: float,
     rotation: int = 0,
     target_height: int = None,
+    crop: tuple = None,
+    fps: int = None,
 ) -> str:
     """
-    Build the video filter chain for scaling and rotation.
+    Build the video filter chain for crop, rotation, scaling, and frame rate.
 
     Args:
         scale_factor: Scale multiplier (ignored when target_height is set)
         rotation: Rotation angle (0, 90, 180, 270)
         target_height: Pin output to this exact height; FFmpeg computes an even-valued width
+        crop: (x, y, w, h) in original video pixels; applied before rotation/scale
+        fps: Output frame rate cap; None keeps the source rate
 
     Returns:
         Comma-separated filter string
     """
     filters = []
 
-    # Apply rotation if specified
+    # Crop first so rotation/scale operate on the already-cropped frame
+    if crop:
+        x, y, w, h = crop
+        filters.append(f"crop={w}:{h}:{x}:{y}")
+
     if rotation > 0:
         rotation_filter = ROTATION_ANGLES.get(rotation)
         if rotation_filter:
             filters.append(rotation_filter)
 
-    # Apply scaling
     if target_height is not None:
         # -2 instructs FFmpeg to pick the nearest even width that preserves aspect ratio
         scale_filter = f"scale=-2:{target_height}"
     else:
         scale_filter = f"scale=iw*{scale_factor}:ih*{scale_factor}"
     filters.append(scale_filter)
+
+    if fps is not None:
+        filters.append(f"fps={fps}")
 
     return ",".join(filters)
 
@@ -246,6 +286,7 @@ def build_encoding_commands(
     use_2pass: bool,
     trim_prefix: str = "",
     title: str = "",
+    passlog_prefix: str = "",
 ) -> tuple:
     """
     Build complete ffmpeg encoding commands for 1-pass or 2-pass encoding.
@@ -264,6 +305,8 @@ def build_encoding_commands(
         filters: Video filter chain
         use_2pass: Whether to use 2-pass encoding
         trim_prefix: Optional trim parameters
+        passlog_prefix: Path prefix for -passlogfile (keeps pass logs out of the CWD);
+            empty string lets ffmpeg use its default ffmpeg2pass-0.log in the CWD
 
     Returns:
         Tuple of (command_pass1, command_pass2 or None)
@@ -287,14 +330,97 @@ def build_encoding_commands(
 
     # Build pass commands
     if use_2pass:
+        passlog = f'-passlogfile "{passlog_prefix}" ' if passlog_prefix else ""
         # Pass 1: No audio, only video
-        cmd_pass1 = base_cmd + f"-pass 1 -f {OUTPUT_FORMAT} nul"
+        cmd_pass1 = base_cmd + f"-pass 1 {passlog}-f {OUTPUT_FORMAT} nul"
         # Pass 2: Add audio, metadata, and output
         cmd_pass2 = (
-            base_cmd + f"-pass 2 {audio_params}{metadata}" + f'-f {OUTPUT_FORMAT} "{output_file}"'
+            base_cmd + f"-pass 2 {passlog}{audio_params}{metadata}"
+            + f'-f {OUTPUT_FORMAT} "{output_file}"'
         )
         return cmd_pass1, cmd_pass2
 
     # Single pass: Add audio, metadata, and output
     cmd = base_cmd + audio_params + metadata + f'-f {OUTPUT_FORMAT} "{output_file}"'
+    return cmd, None
+
+
+def build_h264_quality_params(use_2pass: bool) -> str:
+    """
+    Build H.264-specific quality parameters.
+
+    Args:
+        use_2pass: Whether 2-pass encoding is used (selects slower preset for better quality)
+
+    Returns:
+        Quality parameters string
+    """
+    preset = H264_PRESET_2PASS if use_2pass else H264_PRESET_1PASS
+    return (
+        f"-preset {preset} "
+        f"-profile:v {H264_PROFILE} "
+        f"-level:v {H264_LEVEL} "
+        f"-movflags +faststart"
+    )
+
+
+def build_h264_encoding_commands(
+    input_video: str,
+    output_file: str,
+    video_bitrate: int,
+    audio_enabled: bool,
+    audio_bitrate: int,
+    filters: str,
+    use_2pass: bool,
+    trim_prefix: str = "",
+    title: str = "",
+    passlog_prefix: str = "",
+) -> tuple:
+    """
+    Build complete ffmpeg encoding commands for H.264/AAC MP4 output.
+
+    Args:
+        input_video: Path to input video
+        output_file: Path to output file
+        video_bitrate: Target video bitrate in bps
+        audio_enabled: Whether to include audio
+        audio_bitrate: Audio bitrate in bps
+        filters: Video filter chain
+        use_2pass: Whether to use 2-pass encoding
+        trim_prefix: Optional trim parameters
+        title: Optional metadata title
+        passlog_prefix: Path prefix for -passlogfile (keeps pass logs out of the CWD);
+            empty string lets ffmpeg use its default ffmpeg2pass-0.log in the CWD
+
+    Returns:
+        Tuple of (command_pass1, command_pass2 or None)
+    """
+    maxrate = int(video_bitrate * MAXRATE_FACTOR_VP9)
+    quality_params = build_h264_quality_params(use_2pass)
+
+    base_cmd = (
+        f"ffmpeg.exe -threads {NUM_THREADS} {trim_prefix}"
+        f'-i "{input_video}" '
+        f"-c:v {CODEC_H264} "
+        f"-pix_fmt yuv420p "
+        f"-b:v {video_bitrate} "
+        f"-maxrate {maxrate} "
+        f"-bufsize {maxrate * VBV_BUFSIZE_MULTIPLIER} "
+        f"{quality_params} "
+        f"-vf {filters} "
+    )
+
+    audio_params = f"-c:a aac -b:a {audio_bitrate} " if audio_enabled else "-an "
+    metadata = f'-metadata title="{title}" ' if title else ""
+
+    if use_2pass:
+        passlog = f'-passlogfile "{passlog_prefix}" ' if passlog_prefix else ""
+        cmd_pass1 = base_cmd + f"-pass 1 {passlog}-an -f null nul"
+        cmd_pass2 = (
+            base_cmd + f"-pass 2 {passlog}{audio_params}{metadata}"
+            + f'-f {OUTPUT_FORMAT_MP4} "{output_file}"'
+        )
+        return cmd_pass1, cmd_pass2
+
+    cmd = base_cmd + audio_params + metadata + f'-f {OUTPUT_FORMAT_MP4} "{output_file}"'
     return cmd, None

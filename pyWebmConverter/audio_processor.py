@@ -11,6 +11,8 @@ from .constants import (
     AUDIO_ADJUSTMENT_MAX_ATTEMPTS,
     AUDIO_EXTRACTION_FORMAT,
     EXTRACTED_AUDIO_FILENAME,
+    EXTRACTED_AUDIO_FILENAME_AAC,
+    AUDIO_CODEC_AAC,
     TEMP_FILE_PREFIX,
     INFO_EXTRACTING_AUDIO,
     INFO_AUDIO_ADJUSTMENT,
@@ -24,6 +26,7 @@ def adjust_audio_bitrate(
     target_size_mb: float,
     log_callback,
     trim_prefix: str = "",
+    audio_codec: str = AUDIO_EXTRACTION_FORMAT,
 ) -> int:
     """
     Binary-search for the highest audio bitrate that keeps the file under target.
@@ -38,13 +41,18 @@ def adjust_audio_bitrate(
         target_size_mb: Hard upper limit in MB — must not exceed this
         log_callback: Function to send log strings to the GUI
         trim_prefix: Optional ffmpeg trim flags (-ss / -t)
+        audio_codec: FFmpeg audio codec name ("libopus" or "aac")
 
     Returns:
         Final audio bitrate used in kbps
     """
     target_size_bytes = target_size_mb * 1024 * 1024
     output_dir = os.path.dirname(encoded_video) or "."
-    extracted_audio_path = os.path.join(output_dir, EXTRACTED_AUDIO_FILENAME)
+    audio_filename = (
+        EXTRACTED_AUDIO_FILENAME_AAC if audio_codec == AUDIO_CODEC_AAC
+        else EXTRACTED_AUDIO_FILENAME
+    )
+    extracted_audio_path = os.path.join(output_dir, audio_filename)
     temp_output = os.path.join(
         output_dir, f"{TEMP_FILE_PREFIX}{os.path.basename(encoded_video)}"
     )
@@ -52,7 +60,7 @@ def adjust_audio_bitrate(
     log_callback(INFO_EXTRACTING_AUDIO)
     extract_cmd = (
         f'ffmpeg.exe -y {trim_prefix}-i "{original_video}"'
-        f' -vn -c:a {AUDIO_EXTRACTION_FORMAT} "{extracted_audio_path}"'
+        f' -vn -c:a {audio_codec} "{extracted_audio_path}"'
     )
     os.system(extract_cmd)
 
@@ -68,7 +76,7 @@ def adjust_audio_bitrate(
 
         cmd_adjust_audio = (
             f'ffmpeg.exe -y -i "{encoded_video}" -i "{extracted_audio_path}"'
-            f' -c:v copy -c:a libopus -b:a {mid}k'
+            f' -c:v copy -c:a {audio_codec} -b:a {mid}k'
             f' -map 0:v:0 -map 1:a:0 "{temp_output}"'
         )
         os.system(cmd_adjust_audio)

@@ -6,6 +6,7 @@ Centralized definitions for magic numbers, thresholds, and parameter values.
 # Video codec configuration
 CODEC_VP9 = "libvpx-vp9"
 CODEC_AV1 = "libaom-av1"
+CODEC_H264 = "libx264"
 
 # Bitrate thresholds (in bits per second)
 AV1_BITRATE_THRESHOLD = 800000  # Use AV1 only for >= 800 kbps
@@ -31,11 +32,14 @@ SCALE_FACTOR_NATIVE = 1.0  # No scaling
 
 # Audio configuration
 AUDIO_CODEC = "libopus"
-AUDIO_INITIAL_BITRATE = 96   # kbps — binary search starting midpoint
-AUDIO_DEFAULT_BITRATE = 96000  # bps budgeted for audio during video encode (matches above)
-AUDIO_MIN_BITRATE_KBPS = 8    # binary search lower bound
+AUDIO_CODEC_AAC = "aac"
+AUDIO_INITIAL_BITRATE = 96  # kbps — binary search starting midpoint
+AUDIO_DEFAULT_BITRATE = (
+    96000  # bps budgeted for audio during video encode (matches above)
+)
+AUDIO_MIN_BITRATE_KBPS = 8  # binary search lower bound
 AUDIO_MAX_BITRATE_KBPS = 128  # binary search upper bound — Opus at 128 is transparent
-AUDIO_BITRATE_STEP = 4        # kbps — binary search stops when range < this
+AUDIO_BITRATE_STEP = 4  # kbps — binary search stops when range < this
 
 # Audio adjustment parameters
 AUDIO_ADJUSTMENT_MAX_ATTEMPTS = 12  # binary search converges in ~log2(312/4) ≈ 7 steps
@@ -43,10 +47,10 @@ AUDIO_EXTRACTION_FORMAT = "libopus"
 
 # Bitrate safety margins — reserve headroom for container overhead + rate control variance.
 # Applied directly to the bit budget so encoder parameters stay correct.
-SAFETY_MARGIN_LARGE = 0.98   # >= 8MB  : 2% reserve
+SAFETY_MARGIN_LARGE = 0.98  # >= 8MB  : 2% reserve
 SAFETY_MARGIN_MEDIUM = 0.97  # 4–8MB  : 3% reserve
-SAFETY_MARGIN_SMALL = 0.96   # 2–4MB  : 4% reserve
-SAFETY_MARGIN_TINY = 0.94    # < 2MB  : 6% reserve (container overhead is bigger %)
+SAFETY_MARGIN_SMALL = 0.96  # 2–4MB  : 4% reserve
+SAFETY_MARGIN_TINY = 0.94  # < 2MB  : 6% reserve (container overhead is bigger %)
 
 # Rate control settings
 # maxrate == video_bitrate: the safety margin in the budget is what keeps us under,
@@ -88,7 +92,14 @@ ROTATION_ANGLES = {
     270: "transpose=2",
 }
 
+# H.264 / MP4 encoding settings
+H264_PRESET_2PASS = "slow"
+H264_PRESET_1PASS = "medium"
+H264_PROFILE = "high"
+H264_LEVEL = "4.1"
+
 # UI defaults
+DEFAULT_OUTPUT_FORMAT_OPTIONS = ["WebM (VP9/AV1)", "MP4 (Twitter/X)"]
 DEFAULT_FILE_SIZE_MB = 3.0
 DEFAULT_AUDIO = "on"
 DEFAULT_AUDIO_OPTIONS = ["on", "off"]
@@ -105,21 +116,34 @@ DEFAULT_SCALE_OPTIONS = [
     "0.5x",
     "0.25x",
 ]
+DEFAULT_FPS_OPTIONS = ["Auto", "15", "24", "30", "60"]
 DEFAULT_2PASS = True
 DEFAULT_AV1 = False
+
+# Auto file-size heuristic: target this many MB per second of clip duration
+AUTO_SIZE_MB_PER_SECOND = 0.4   # ~4 MB per 10 s — comfortable Reddit/4chan quality
+AUTO_SIZE_MIN_MB = 0.5
+AUTO_SIZE_MAX_MB = 50.0
 
 # Video editor settings
 VIDEO_EDITOR_WIDTH = 900
 VIDEO_EDITOR_HEIGHT = 700
-VIDEO_PREVIEW_WIDTH = 640
+VIDEO_PREVIEW_WIDTH = 480
+VIDEO_PREVIEW_MAX_FPS = 60  # cap preview playback; skips source frames to compensate
+VIDEO_SEEK_DEBOUNCE_MS = 25  # slider settle time before issuing a cv2 seek
+
+# Waveform settings
+WAVEFORM_BUCKETS = 2000    # horizontal resolution; enough for displays up to 2000px wide
+WAVEFORM_SAMPLE_RATE = 4000  # Hz — low enough to keep RAM reasonable, high enough for accuracy
 
 # Temporary file settings
 TEMP_FILE_PREFIX = "temp__"
-TEMP_LOG_FILES = ["ffmpeg2pass-0.log", "ffmpeg-mbtree.log", "ffmpeg-mbtree.log.mbtree"]
 
 # Format settings
 OUTPUT_FORMAT = "webm"
+OUTPUT_FORMAT_MP4 = "mp4"
 EXTRACTED_AUDIO_FILENAME = "extracted_audio.opus"
+EXTRACTED_AUDIO_FILENAME_AAC = "extracted_audio.aac"
 
 # Error messages
 ERROR_NO_INPUT = "Error: Please select an input video file first."

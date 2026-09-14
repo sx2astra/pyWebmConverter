@@ -59,7 +59,7 @@ pywebmconverter
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/pyWebmConverter.git
+git clone https://github.com/sx2astra/pyWebmConverter.git
 cd pyWebmConverter
 ```
 
@@ -227,7 +227,7 @@ If audio adjustment overshoots, use the "Override Target Size" feature to calcul
 ### Setting Up Development Environment
 
 ```bash
-git clone https://github.com/yourusername/pyWebmConverter.git
+git clone https://github.com/sx2astra/pyWebmConverter.git
 cd pyWebmConverter
 python -m venv venv
 source venv/bin/activate
@@ -258,8 +258,8 @@ This project is released into the public domain under the Unlicense. See [LICENS
 ## Support
 
 For issues, feature requests, or questions:
-- Open an [Issue](https://github.com/yourusername/pyWebmConverter/issues)
-- Check [Discussions](https://github.com/yourusername/pyWebmConverter/discussions)
+- Open an [Issue](https://github.com/sx2astra/pyWebmConverter/issues)
+- Check [Discussions](https://github.com/sx2astra/pyWebmConverter/discussions)
 
 ## Acknowledgments
 

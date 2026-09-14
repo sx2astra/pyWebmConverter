@@ -7,9 +7,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] "VictoriousVla" - 2026-09-13
+
+### Added
+
+- Encoding progress bar (0–100%, two-pass aware: pass 1 fills 0–50%, pass 2 fills 50–100%)
+- Cancel button during encoding — terminates the running FFmpeg process immediately
+- Drag & drop input file onto the main window
+- File pickers remember the last-used input directory between sessions; the output picker opens in the current output directory
+- Crop tool in the video editor — drag a selection on the preview to set a crop region
+- Keyboard shortcuts in the video editor: Space = play/pause, ← = previous frame, → = next frame
+- Video editor restores previous trim, crop, and rotation when reopened for the same file
+- Trim, crop, and rotation settings are preserved across conversions; only reset when a new input file is selected
+
+### Changed
+
+- Video editor preview now fills and centres within the dialog window (expands with resize)
+- Preview performance: scaling moved from Qt to cv2 before QImage creation, reducing memory bandwidth
+- Preview playback capped at 60 fps with source-frame skipping to compensate for high-fps sources
+- Timeline slider seek debounced (25 ms) to avoid hammering the decoder on every drag pixel
+- Settings (output directory, file size, audio, scale, 2-pass, AV1) now persisted between sessions via QSettings
+
+### Fixed
+
+- Two-pass encoding no longer leaves `ffmpeg2pass-*.log` files in the working directory — pass logs are written to a temporary directory and removed after every run (success, failure, or cancel)
+
+---
+
 ## [1.2.0] "WhimsicalWispa" - 2026-06-22
 
 ### Added
+
 - Resolution-based scaling options (480p, 720p, 1080p) in addition to percentage-based scaling
 - Frame-by-frame navigation in video editor (← Frame / Frame → buttons)
 - Set Start / Set End buttons in video editor to mark trim points at the current frame
@@ -36,10 +64,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - "Could not determine video dimensions" error after resolution scaling was introduced — switched from fragile `ffmpeg -i` + regex parsing to `ffprobe` with structured CSV output
 - Git folder casing corrected from `pyWebMConverter` to `pyWebmConverter`
 
-
 ## [1.1.0] "XenialXuixo" - 2026-06-17
 
 ### Added
+
 - Full PyQt5 graphical user interface
 - Video editor dialog for preview, trimming, rotation, and scaling
 - FFmpeg command builder with codec and quality optimization
@@ -50,13 +78,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configuration constants for centralized parameter management
 
 ### Changed
+
 - Replaced conf.ini configuration with constants-based settings
 - Refactored encoding pipeline into modular components
 - Enhanced documentation with encoding logic and feature descriptions
 
-## [1.0.0] - 2024-XX-XX
+## [1.0.0] - 2022-07-16
 
 ### Added
+
 - Initial public release
 - FFmpeg-based WebM video converter with PyQt5 GUI
 - Support for VP9 and AV1 video codecs
@@ -67,17 +97,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive test suite
 
 ### Fixed
+
 - Cleaned up project structure for production release
 - Removed obsolete dependencies
 
 ### Changed
+
 - Migrated to modern Python packaging (setup.py, pyproject.toml)
 - Updated documentation for GitHub release
 
 ## Development Guidelines
 
 When updating this changelog:
+
 - Add new changes under an `[Unreleased]` section at the top
 - Follow the existing format
 - Categorize changes: Added, Changed, Deprecated, Removed, Fixed, Security
-- Link to comparative view: `[1.0.0]: https://github.com/yourusername/pyWebmConverter/releases/tag/v1.0.0`
+- Add a comparison link for each version at the bottom of the file (see below)
+
+[1.3.0]: https://github.com/sx2astra/pyWebmConverter/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/sx2astra/pyWebmConverter/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/sx2astra/pyWebmConverter/compare/v1.0...v1.1.0
+[1.0.0]: https://github.com/sx2astra/pyWebmConverter/releases/tag/v1.0

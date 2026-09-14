@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyWebmConverter"
-version = "1.2.0"
+dynamic = ["version"]
 description = "A Python GUI application for converting video files to WebM format"
 readme = "README.md"
 license = {text = "Unlicense"}
@@ -41,12 +41,15 @@ dev = [
 pywebmconverter = "pyWebmConverter.ffmpeg_gui:main"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/pyWebmConverter"
-"Bug Reports" = "https://github.com/yourusername/pyWebmConverter/issues"
-"Source Code" = "https://github.com/yourusername/pyWebmConverter"
+Homepage = "https://github.com/sx2astra/pyWebmConverter"
+"Bug Reports" = "https://github.com/sx2astra/pyWebmConverter/issues"
+"Source Code" = "https://github.com/sx2astra/pyWebmConverter"
 
 [tool.setuptools]
 packages = ["pyWebmConverter"]
+
+[tool.setuptools.dynamic]
+version = {attr = "pyWebmConverter.__version__"}
 
 [tool.pytest.ini_options]
 testpaths = ["test"]
@@ -60,6 +63,14 @@ disable = [
     "too-many-arguments",
     "too-many-positional-arguments",
     "too-many-locals",
+    "too-many-instance-attributes",
+    "too-many-statements",
+    "too-many-return-statements",
+    "too-many-branches",
+    "too-few-public-methods",
+    "invalid-name",
+    "no-name-in-module",
+    "no-member",
 ]
 
 [tool.pylint.format]

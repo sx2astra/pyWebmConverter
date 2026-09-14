@@ -36,6 +36,7 @@ MANIFEST
 Output/
 pyWebmConverter/Output/
 *.webm
+ffmpeg2pass-*.log*
 
 # Installer logs
 pip-log.txt

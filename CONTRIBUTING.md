@@ -31,7 +31,7 @@ pyWebmConverter/
 1. **Fork the repository** on GitHub
 2. **Clone your fork** locally:
    ```bash
-   git clone https://github.com/yourusername/pyWebmConverter.git
+   git clone https://github.com/sx2astra/pyWebmConverter.git
    cd pyWebmConverter
    ```
 
